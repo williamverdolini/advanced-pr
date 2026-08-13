@@ -1,4 +1,4 @@
-# Advanced PR Review — Estensione Azure DevOps
+# Advanced PR Review, Estensione Azure DevOps
 
 **Piano di fattibilità e di implementazione**
 
@@ -25,12 +25,12 @@
 
 ## 1. Verdetto di fattibilità
 
-**Fattibile, con un rischio tecnico concentrato in un solo punto** (il diff viewer nell'iframe — §7).
+**Fattibile, con un rischio tecnico concentrato in un solo punto** (il diff viewer nell'iframe, §7).
 
 Il fattore decisivo a favore di questa opzione è che **non serve alcun backend**: l'estensione è una SPA statica impacchettata nel `.vsix`, servita dalla CDN del Marketplace, che chiama le REST API di Azure DevOps **direttamente dal browser, con l'identità dell'utente collegato**. La documentazione ufficiale è esplicita:
 
 > *"Most extensions call Azure DevOps REST APIs on behalf of the current user."*
-> — [Authenticate and secure web extensions](https://learn.microsoft.com/en-us/azure/devops/extend/develop/auth?view=azure-devops)
+>: [Authenticate and secure web extensions](https://learn.microsoft.com/en-us/azure/devops/extend/develop/auth?view=azure-devops)
 
 Conseguenze dirette sui requisiti:
 
@@ -133,7 +133,7 @@ Estratti dal [Manifest Reference](https://learn.microsoft.com/en-us/azure/devops
 | Scope | Perché serve |
 |---|---|
 | `vso.code_write` | Leggere PR, iterazioni, file, blob; **creare thread e commenti**; **votare** (approve/reject). È lo scope che copre "create and manage pull requests and code reviews" |
-| `vso.threads_full` | *"Grants the ability to read and write to pull request comment threads."* — necessario per i thread e le reazioni |
+| `vso.threads_full` | *"Grants the ability to read and write to pull request comment threads."*: necessario per i thread e le reazioni |
 | `vso.build` | Build collegate alla PR (requisito "stati delle compilazioni collegate") |
 | `vso.work` | Work item collegati alla PR; escluso dalla v1 se il requisito non viene confermato |
 
@@ -157,7 +157,7 @@ SDK.register(SDK.getContributionId(), {
 
 Più `SDK.getConfiguration()`, `SDK.getWebContext()` (org, project, team, utente corrente) e `SDK.getPageContext()`.
 
-🔎 **Da verificare nello spike (§13):** la forma esatta di `tabContext` per `pr-tabs` — se contiene `pullRequestId` e `repositoryId` direttamente. Il fallback deve usare soltanto API SDK o configurazione documentata; il parsing della route dell'host è fragile e non va considerato un contratto supportato.
+🔎 **Da verificare nello spike (§13):** la forma esatta di `tabContext` per `pr-tabs`, se contiene `pullRequestId` e `repositoryId` direttamente. Il fallback deve usare soltanto API SDK o configurazione documentata; il parsing della route dell'host è fragile e non va considerato un contratto supportato.
 
 ### 3.4 Dove vive lo stato
 
@@ -169,7 +169,7 @@ Più `SDK.getConfiguration()`, `SDK.getWebContext()` (org, project, team, utente
 | Approvazioni di step | Reply evento nel thread-ledger del piano (§5) |
 | Approvazione della PR intera | `reviewers[].vote` della PR |
 | Commenti, reply, like | Thread AZDO |
-| Preferenze UI (side-by-side/inline, whitespace, file "visti") | `ExtensionDataService` dell'SDK, documento **per-utente** — opzionale, degradabile a `localStorage` |
+| Preferenze UI (side-by-side/inline, whitespace, file "visti") | `ExtensionDataService` dell'SDK, documento **per-utente**: opzionale, degradabile a `localStorage` |
 
 Questo rende l'app **stateless e riavviabile**, e soprattutto: chi usa la UI classica di Azure DevOps vede comunque tutto (i commenti di approvazione sono commenti veri).
 
@@ -196,7 +196,7 @@ Il piano è un thread generale della PR il cui primo commento contiene un marker
 Conseguenza da accettare consapevolmente: se l'autore dimentica il marker, la PR degrada a step unico. È il prezzo di avere zero falsi positivi, ed è un comportamento prevedibile e spiegabile.
 
 **Mitigazioni previste** (economiche, riducono quasi a zero il fastidio):
-- Un **pulsante "Copy template"** nel tab quando non viene trovato alcun piano: copia negli appunti lo scheletro del commento — marker già incluso e file della PR pre-elencati — pronto da incollare nella PR.
+- Un **pulsante "Copy template"** nel tab quando non viene trovato alcun piano: copia negli appunti lo scheletro del commento (marker già incluso e file della PR pre-elencati) pronto da incollare nella PR.
 - Il testo dello stato vuoto dice **perché** si vede un solo step, non solo che lo si vede.
 
 ⚠️ **Da valutare in M3:** il marker deve essere scritto dal processo che genera il piano o dall'estensione. Un pulsante "Create review plan" eliminerebbe il rischio di marker malformati, ma amplia la v1. Vedi Q16 in §12.
@@ -256,14 +256,14 @@ Azure DevOps **non ha** il concetto di step: il voto è **un solo valore per rev
 
 Il thread che contiene il piano è anche il **ledger append-only** della sua versione. Approvazioni, richieste di modifica e decisioni PR sono reply nello stesso thread. Non si crea un thread lazy per ogni step: così due reviewer concorrenti non possono creare due contenitori autorevoli per lo stesso step.
 
-**Senza piano il ledger esiste comunque.** Una PR senza piano autorizzato ha pur sempre uno step revisionabile — `Everything else` con tutti i file — e quello step va trattato come qualunque altro, senza logiche speciali. Il primo evento registrato apre quindi un thread generale che fa da ledger, e gli eventi successivi vi si accodano. La lettura raccoglie gli eventi da **tutti** i thread generali, non solo da quello del piano: l'autorità di un evento non è mai dipesa da dove sta, ma dall'autore Azure DevOps del commento e dalla corrispondenza con `planId`, versione e `planHash` correnti. Quando l'autore pubblica un piano vero, gli eventi del piano sintetico smettono di corrispondere e decadono da soli.
+**Senza piano il ledger esiste comunque.** Una PR senza piano autorizzato ha pur sempre uno step revisionabile (`Everything else` con tutti i file) e quello step va trattato come qualunque altro, senza logiche speciali. Il primo evento registrato apre quindi un thread generale che fa da ledger, e gli eventi successivi vi si accodano. La lettura raccoglie gli eventi da **tutti** i thread generali, non solo da quello del piano: l'autorità di un evento non è mai dipesa da dove sta, ma dall'autore Azure DevOps del commento e dalla corrispondenza con `planId`, versione e `planHash` correnti. Quando l'autore pubblica un piano vero, gli eventi del piano sintetico smettono di corrispondere e decadono da soli.
 
 Chi usa la UI classica vede un log umano delle decisioni; l'estensione ricostruisce lo stato dai marker senza database. Se il thread viene cancellato, chiuso in modo incompatibile o reso non leggibile, la review entra in sola lettura finché il piano non viene ripristinato o sostituito esplicitamente.
 
 ### 5.2 Formato del marker
 
 ```markdown
-✅ **Step approved — `Core`** (step 1 of 4) · iteration 3
+✅ **Step approved: `Core`** (step 1 of 4) · iteration 3
 
 <!-- advanced-pr:v2 {"kind":"step-approved","eventId":"7bb0d4c8-0b10-49e9-85b7-55f335494f49","planId":"550e8400-e29b-41d4-a716-446655440000","planVersion":1,"planHash":"a1b2c3d4","stepId":"step-9f42","iteration":3,"stepFingerprint":"f4e1a920"} -->
 ```
@@ -283,13 +283,13 @@ Il reducer:
 
 Dopo un timeout di scrittura, il client rilegge il ledger e cerca lo stesso `eventId` prima di ritentare. Reply concorrenti sono ammesse e duplicati identici non cambiano lo stato.
 
-🔎 **Da verificare nello spike (§13):** che Azure DevOps non elimini né mostri gli HTML comment nei commenti PR. Se li sanitizzasse, il fallback è una riga visibile in code-span — meno elegante, funzionalmente identico.
+🔎 **Da verificare nello spike (§13):** che Azure DevOps non elimini né mostri gli HTML comment nei commenti PR. Se li sanitizzasse, il fallback è una riga visibile in code-span: meno elegante, funzionalmente identico.
 
 ### 5.3 Approvazione esplicita della PR
 
 `Approve step` registra soltanto l'evento dello step. Quando tutti gli step non vuoti della versione corrente sono approvati dal reviewer e nessuno è `ChangesRequested`, la UI abilita il comando distinto **Approve pull request**:
 
-1. mostra un dialog con riepilogo — *"You are approving the whole pull request — 4 steps, 127 files"*;
+1. mostra un dialog con riepilogo (*"You are approving the whole pull request) 4 steps, 127 files"*;
 2. se esistono thread aperti creati dall'utente, mostra un warning confermabile, non un blocco;
 3. scrive l'evento `pr-approved` nel ledger;
 4. chiama `PUT .../pullRequests/{id}/reviewers/{myId}` con `vote: 10`.
@@ -335,7 +335,7 @@ Il voto `-5` è **reversibile**, ma non alla semplice approvazione di un altro s
 
 L'estensione non sovrascrive automaticamente voti `5`, `10` o `-10` espressi nella UI classica. Ogni modifica del voto globale avviene soltanto in risposta a un comando esplicito dell'utente.
 
-In entrambi i casi la UI deve dire esplicitamente cosa succede al voto globale — *"your PR vote is now Waiting for author"* — perché è l'unico punto in cui la finzione degli step tocca uno stato reale e condiviso della PR.
+In entrambi i casi la UI deve dire esplicitamente cosa succede al voto globale (*"your PR vote is now Waiting for author"*) perché è l'unico punto in cui la finzione degli step tocca uno stato reale e condiviso della PR.
 
 ### 5.7 Macchina a stati di uno step (per reviewer)
 
@@ -366,7 +366,7 @@ In pratica queste chiamate si fanno tramite i client tipizzati di [`azure-devops
 | Work item collegati | `GET /pullRequests/{prId}/workitems` |
 | Utente corrente | `SDK.getWebContext().user` (nessuna chiamata REST) |
 
-Il **link alla PR classica** è `pullRequest._links.web.href` — requisito soddisfatto con un campo già presente nella risposta.
+Il **link alla PR classica** è `pullRequest._links.web.href`: requisito soddisfatto con un campo già presente nella risposta.
 
 ### 6.2 Contenuto dei file per il diff
 
@@ -413,7 +413,7 @@ Valori: `10` approved · `5` approved with suggestions · `0` no vote · `-5` wa
 
 ---
 
-## 7. Diff viewer — la parte delicata
+## 7. Diff viewer: la parte delicata
 
 ### 7.1 Opzione raccomandata: Monaco DiffEditor
 
@@ -437,7 +437,7 @@ selezione in Monaco  ──►  threadContext { filePath, rightFileStart {line, 
 ```
 
 Punti da verificare con un round-trip reale contro la UI nativa di Azure DevOps:
-- Monaco usa righe e colonne **1-based**; l'`offset` di Azure DevOps sembra 1-based — **da confermare**.
+- Monaco usa righe e colonne **1-based**; l'`offset` di Azure DevOps sembra 1-based: **da confermare**.
 - Va tracciato il **lato del diff**: i commenti sulla versione base usano `leftFileStart/End`, non `rightFileStart/End`.
 - Su una PR con **più iterazioni**, l'ancoraggio va verificato anche a distanza di un push.
 
@@ -450,13 +450,13 @@ Punti da verificare con un round-trip reale contro la UI nativa di Azure DevOps:
 - Reply, like, resolve/reopen e composer di un nuovo thread vivono dentro la zona. Ogni card ha il proprio stato di pending ed errore: una reply fallita non azzera la review.
 - Il **glyph margin** è l'affordance di scrittura: su una riga commentata il click seleziona il thread, su una riga libera mostra un `+` e apre il composer. Se il click cade dentro una selezione attiva, viene ancorato l'intero range invece della singola riga.
 
-**Markdown dei commenti: renderizzato, non incollato.** Il testo dei commenti è **contenuto scritto da altri utenti**, mostrato dentro un iframe che detiene il token dell'utente corrente: renderizzarlo come HTML aprirebbe una XSS con un bersaglio di valore. Per questo `core/markdown.ts` produce un albero di valori e `components/Markdown.tsx` lo trasforma in **elementi React**, senza `dangerouslySetInnerHTML` da nessuna parte — l'iniezione di markup è impossibile per costruzione, non per sanitizzazione. Gli URL passano da una allowlist di schemi (`http`, `https`, `mailto`, path relativi): un `javascript:` resta testo. Il sottoinsieme coperto è quello che la toolbar dell'editor sa produrre (grassetto, corsivo, code span e blocchi, link, citazioni, liste, heading), unit-testato.
+**Markdown dei commenti: renderizzato, non incollato.** Il testo dei commenti è **contenuto scritto da altri utenti**, mostrato dentro un iframe che detiene il token dell'utente corrente: renderizzarlo come HTML aprirebbe una XSS con un bersaglio di valore. Per questo `core/markdown.ts` produce un albero di valori e `components/Markdown.tsx` lo trasforma in **elementi React**, senza `dangerouslySetInnerHTML` da nessuna parte: l'iniezione di markup è impossibile per costruzione, non per sanitizzazione. Gli URL passano da una allowlist di schemi (`http`, `https`, `mailto`, path relativi): un `javascript:` resta testo. Il sottoinsieme coperto è quello che la toolbar dell'editor sa produrre (grassetto, corsivo, code span e blocchi, link, citazioni, liste, heading), unit-testato.
 
 L'editor mostra una **preview live** sotto il campo appena c'è del testo, e un commento può essere **modificato dal suo autore** (`updateComment`); il comando compare solo sui propri commenti, e comunque il servizio lo impone lato server.
 
 **Tipo di modifica.** `changeType` di Azure DevOps è un enum di flag (un rename arriva come `Rename | Edit`, un undelete come `Undelete | Add`), quindi la classificazione è a bit in `core/changeType.ts`, unit-testata sulle combinazioni reali. Il risultato guida due cose: l'indicatore nella treeview (`+` aggiunto, `±` modificato, `−` eliminato, `→` rinominato, con etichetta accessibile) e la modalità del visualizzatore.
 
-**File a un solo lato: nessun diff.** Un file **aggiunto** non ha contenuto base e uno **eliminato** non ha contenuto nuovo: entrambi vengono mostrati in un editor singolo read-only (`monaco.editor.create` invece di `createDiffEditor`) — il primo con il contenuto nuovo, il secondo con quello che il file conteneva. Il rename resta in diff, dove il confronto ha significato. `EditorHandle` incapsula la differenza, così zone, decorazioni, glyph margin e commenti hanno **un solo percorso di codice**; il selettore di layout sparisce dove non ha senso.
+**File a un solo lato: nessun diff.** Un file **aggiunto** non ha contenuto base e uno **eliminato** non ha contenuto nuovo: entrambi vengono mostrati in un editor singolo read-only (`monaco.editor.create` invece di `createDiffEditor`), il primo con il contenuto nuovo, il secondo con quello che il file conteneva. Il rename resta in diff, dove il confronto ha significato. `EditorHandle` incapsula la differenza, così zone, decorazioni, glyph margin e commenti hanno **un solo percorso di codice**; il selettore di layout sparisce dove non ha senso.
 
 Il modello delle zone non ragiona più in termini di "side-by-side sì/no" ma di **lati effettivamente a schermo** (`visibleSides`): diff affiancato `["left","right"]`, diff unificato `["right"]`, file aggiunto `["right"]`, file eliminato `["left"]`. Un thread ancorato a un lato non visibile finisce nella zona sopra il file. Su un file eliminato tutti i commenti stanno sul lato base, quindi senza questa generalizzazione sarebbero finiti **tutti** nella zona in cima invece che sulle loro righe.
 
@@ -466,23 +466,23 @@ Il modello delle zone non ragiona più in termini di "side-by-side sì/no" ma di
 
 **Layout del diff: inline di default, side-by-side a scelta dell'utente.** Il selettore sta sopra l'editor e cambia solo `renderSideBySide` via `updateOptions`, senza ricreare l'editor. Vincolo da conoscere: nella vista inline Monaco **non renderizza l'editor originale**, quindi un thread ancorato al lato base non ha una riga sotto cui stare. In quel caso confluisce nella zona sopra il file (con la sua etichetta `Base · line N`) e il messaggio invita a passare a side-by-side per vederlo in posizione. Mappare le righe base sulla vista unificata richiederebbe il risultato del diff di Monaco (`getLineChanges`) ed è un affinamento separato.
 
-**Il modello delle zone è codice puro** (`core/inlineZones.ts`, unit-testato): decide chiavi, lato, riga e cap. La chiave contiene il path del file, quindi cambiare file sostituisce tutte le zone; a parità di chiave la zona — e con essa lo stato React che contiene — sopravvive a un refresh.
+**Il modello delle zone è codice puro** (`core/inlineZones.ts`, unit-testato): decide chiavi, lato, riga e cap. La chiave contiene il path del file, quindi cambiare file sostituisce tutte le zone; a parità di chiave la zona (e con essa lo stato React che contiene) sopravvive a un refresh.
 
 Guardrail e vincoli imparati implementandolo:
 
 - **Refresh granulare obbligatorio.** Ricaricare l'intero workspace dopo una reply ricostruiva l'editor Monaco e i blob. Le azioni sui commenti rileggono soltanto i thread (`refreshThreads`) e conservano l'identità di `files`.
 - **Le zone si riconciliano, non si ricreano.** L'effetto confronta chiavi desiderate e montate; un cambio di riga o di lato **sposta** la zona riusando gli stessi nodi DOM. Ricrearle a ogni render cancellerebbe la reply in scrittura.
 - **Altezza guidata da `ResizeObserver`** su un wrapper interno (il nodo esterno è di proprietà di Monaco, misurarlo sarebbe circolare) → `layoutZone`. Il calcolo una-tantum non regge reply, collapse e testo che va a capo.
-- **Una zona non va mai creata con altezza 0.** Monaco mette `display: none` alle whitespace che non considera visibili (`viewZones.js`, `render()`); un elemento non renderizzato non ha box, quindi `ResizeObserver` non emette mai e la zona resta collassata **in modo irreversibile**. L'effetto secondario è il peggiore: `getZoneAtCoord` non riconosce più l'area come view zone, i click finiscono sul codice sottostante e Monaco avvia una drag-selection — la card sembra "morta". Si parte da un'altezza provvisoria e si ignorano le misurazioni a 0.
+- **Una zona non va mai creata con altezza 0.** Monaco mette `display: none` alle whitespace che non considera visibili (`viewZones.js`, `render()`); un elemento non renderizzato non ha box, quindi `ResizeObserver` non emette mai e la zona resta collassata **in modo irreversibile**. L'effetto secondario è il peggiore: `getZoneAtCoord` non riconosce più l'area come view zone, i click finiscono sul codice sottostante e Monaco avvia una drag-selection, la card sembra "morta". Si parte da un'altezza provvisoria e si ignorano le misurazioni a 0.
 - **Tema.** Azure DevOps applica il tema come variabili CSS sul `body`; il tema di Monaco viene derivato dalla luminanza di `--background-color` (`core/theme.ts`, unit-testato) e riapplicato con un `MutationObserver`, senza dipendere dai nomi delle classi interne dell'host. Lo sfondo della striscia attorno alla card è trasparente, così resta quello dell'editor e non quello della pagina.
-- **Contenimento della tastiera.** La zona vive dentro il DOM dell'editor: senza `stopPropagation` sui key event nativi, digitare in una reply pilota Monaco (frecce, Ctrl+F). Conseguenza accettata: React delega gli eventi a `document`, quindi **i componenti dentro una zona non possono usare handler React da tastiera** — gli shortcut vanno registrati nativamente sul contenitore.
+- **Contenimento della tastiera.** La zona vive dentro il DOM dell'editor: senza `stopPropagation` sui key event nativi, digitare in una reply pilota Monaco (frecce, Ctrl+F). Conseguenza accettata: React delega gli eventi a `document`, quindi **i componenti dentro una zona non possono usare handler React da tastiera**, gli shortcut vanno registrati nativamente sul contenitore.
 - **La zona deve avere `z-index`.** `.view-lines` è dimensionato all'intera area di scroll (`viewLines.js`) e nel DOM viene **dopo** `.view-zones`: senza un ordine di impilamento esplicito copre la zona e ne intercetta tutti i click, pur restando la card perfettamente visibile. È lo stesso motivo per cui il widget interattivo di Monaco dichiara `.monaco-editor .zone-widget { position: absolute; z-index: 10 }`; usiamo lo stesso valore. Scrollbar e diff overview stanno anch'essi a 10 ma vengono dopo nel DOM, quindi vincono il pareggio e restano utilizzabili.
 - **`suppressMouseDown` deve restare `false`.** Il nome inganna: con `true` Monaco fa `preventDefault` sul mouse down, **sposta il focus sulla propria textarea** e avvia una drag-selection (`mouseHandler.js`, ramo `targetIsViewZone`), rendendo i pulsanti e gli input della zona inutilizzabili. Con `false` quel ramo non viene eseguito e l'evento raggiunge il contenuto.
 - **Cap esplicito** (60 zone per file): oltre la soglia i thread meno rilevanti restano raggiungibili dalla tree e il numero nascosto viene **dichiarato**, mai silenziosamente troncato.
 
 ### 7.5 Performance con 100+ file
 
-- **Una sola istanza** di editor, riusata cambiando i model — non un editor per file.
+- **Una sola istanza** di editor, riusata cambiando i model: non un editor per file.
 - Lista file virtualizzata.
 - Blob caricati **lazy**, con richieste annullate al cambio file, e cache LRU con limite per `objectId` (immutabile per costruzione).
 - I Monaco model non più usati vengono esplicitamente eliminati.
@@ -504,7 +504,7 @@ M0 stabilisce soglie misurabili per tempo di apertura, cambio file e memoria su 
 |---|---|---|
 | SDK (`azure-devops-extension-sdk`) | vanilla JS, funziona | vanilla JS, **funziona identicamente** |
 | REST clients (`azure-devops-extension-api`) | funzionano | **funzionano identicamente** |
-| Libreria di componenti nativa | **`azure-devops-ui`** (Microsoft): Tab, Card, Button, Header, Table, Dropdown, Spinner, MessageCard, ZeroData, IdentityPicker | **nessuna** — da reimplementare, o usare Angular Material e accettare un look diverso |
+| Libreria di componenti nativa | **`azure-devops-ui`** (Microsoft): Tab, Card, Button, Header, Table, Dropdown, Spinner, MessageCard, ZeroData, IdentityPicker | **nessuna**, da reimplementare, o usare Angular Material e accettare un look diverso |
 | Tema chiaro/scuro dell'host | gestito dalla libreria | da fare a mano sulle CSS variables iniettate dall'host |
 | Sample e documentazione ufficiale | [azure-devops-extension-sample](https://github.com/microsoft/azure-devops-extension-sample) è React | nessun sample ufficiale |
 | Monaco | integrazione diretta | integrazione diretta (o `ngx-monaco-editor`) |
@@ -512,9 +512,9 @@ M0 stabilisce soglie misurabili per tempo di apertura, cambio file e memoria su 
 
 **Il punto non è il framework, è la libreria di componenti.** L'SDK e le REST API sono JavaScript puro e non hanno alcuna preferenza. La differenza reale è che con React si eredita gratis l'aspetto nativo di Azure DevOps; con Angular va ricostruito.
 
-Stima onesta del sovracosto Angular: **1–2 settimane-uomo** di lavoro puramente cosmetico (riscrittura di ~15 primitive UI + theming chiaro/scuro), più il rischio di un risultato che "si vede" che non è Azure DevOps — in un'app il cui scopo dichiarato è dare *"un'esperienza simile alla review fatta in AZDO"*.
+Stima onesta del sovracosto Angular: **1–2 settimane-uomo** di lavoro puramente cosmetico (riscrittura di ~15 primitive UI + theming chiaro/scuro), più il rischio di un risultato che "si vede" che non è Azure DevOps, in un'app il cui scopo dichiarato è dare *"un'esperienza simile alla review fatta in AZDO"*.
 
-**Mitigazione del fatto che React non è il framework che conosci meglio:** il codice che conta — parser e canonicalizzazione del piano, reducer degli eventi, motore degli step, client verso AZDO — è **completamente framework-agnostico** e va scritto in TypeScript puro, fuori dai componenti. React resta confinato al livello di presentazione. Questo ha tre effetti pratici: gli unit test non toccano React, la curva di apprendimento riguarda solo la UI, e un eventuale cambio di framework in futuro non rimette in discussione la logica.
+**Mitigazione del fatto che React non è il framework che conosci meglio:** il codice che conta (parser e canonicalizzazione del piano, reducer degli eventi, motore degli step, client verso AZDO) è **completamente framework-agnostico** e va scritto in TypeScript puro, fuori dai componenti. React resta confinato al livello di presentazione. Questo ha tre effetti pratici: gli unit test non toccano React, la curva di apprendimento riguarda solo la UI, e un eventuale cambio di framework in futuro non rimette in discussione la logica.
 
 ### 8.1.1 Come si usano i token di tema dell'host
 
@@ -525,7 +525,7 @@ Stima onesta del sovracosto Angular: **1–2 settimane-uomo** di lavoro purament
 | `--palette-neutral-*`, `--palette-accent*` | **terna RGB nuda** (`234, 234, 234`) | `rgba(var(--palette-neutral-8, 234, 234, 234), 1)` |
 | `--background-color`, `--text-primary-color`, `--text-secondary-color`, `--communication-background`, `--component-status-*`, `--palette-black-alpha-*` | **colore completo** | `var(--background-color, #fff)` |
 
-Scrivere `var(--palette-neutral-8, #edebe9)` sembra funzionare in preview locale — dove la variabile non esiste e vince il fallback — ma su un host reale produce `border: 1px solid 234, 234, 234`: dichiarazione **invalida a computed-value time**, quindi la proprietà viene azzerata e **il bordo sparisce del tutto**. È un errore silenzioso che si manifesta solo dentro Azure DevOps.
+Scrivere `var(--palette-neutral-8, #edebe9)` sembra funzionare in preview locale (dove la variabile non esiste e vince il fallback) ma su un host reale produce `border: 1px solid 234, 234, 234`: dichiarazione **invalida a computed-value time**, quindi la proprietà viene azzerata e **il bordo sparisce del tutto**. È un errore silenzioso che si manifesta solo dentro Azure DevOps.
 
 Terne canoniche: `0` 255,255,255 · `2` 248,248,248 · `4` 244,244,244 · `6` 239,239,239 · `8` 234,234,234 · `10` 218,218,218 · `20` 200,200,200 · `30` 166,166,166 · `80` 51,51,51 · `100` 0,0,0.
 
@@ -538,10 +538,10 @@ Terne canoniche: `0` 255,255,255 · `2` 248,248,248 · `4` 244,244,244 · `6` 23
 ### 8.2 Toolchain proposta
 
 - **TypeScript** ovunque.
-- **Vite** o **webpack** per il bundling (webpack ha il plugin Monaco più collaudato; Vite è più veloce da sviluppare — decidere nello spike in base a come si comporta il worker di Monaco).
+- **Vite** o **webpack** per il bundling (webpack ha il plugin Monaco più collaudato; Vite è più veloce da sviluppare: decidere nello spike in base a come si comporta il worker di Monaco).
 - **`tfx-cli`** per package/publish: `npx tfx-cli extension create --rev-version`.
 - **Vitest/Jest** per gli unit test (parser e motore step: il grosso del valore).
-- **Playwright** per un E2E leggero — l'iframe rende gli E2E costosi, tenerne pochi e mirati.
+- **Playwright** per un E2E leggero: l'iframe rende gli E2E costosi, tenerne pochi e mirati.
 
 ---
 
@@ -635,7 +635,7 @@ Il round-trip "faccio dall'estensione, controllo in AZDO" è il test più import
 2. File con più thread: tutte le zone montate, altezze corrette, nessuna sovrapposizione con le righe del diff.
 3. Reply dentro la zona → il testo non viene perso, l'altezza si ricalcola, l'editor non viene ricostruito e lo scroll non salta.
 4. Digitazione nella reply: frecce, `Ctrl+F` e `Esc` non pilotano Monaco.
-5. `+` nel glyph margin su riga libera → composer ancorato alla riga giusta; con una selezione attiva → range multi-riga; il thread creato è verificato nella UI classica di AZDO (lato e offset corretti — l'offset di fine per il click su riga è la lunghezza della riga + 1, da confermare nel round-trip).
+5. `+` nel glyph margin su riga libera → composer ancorato alla riga giusta; con una selezione attiva → range multi-riga; il thread creato è verificato nella UI classica di AZDO (lato e offset corretti: l'offset di fine per il click su riga è la lunghezza della riga + 1, da confermare nel round-trip).
 6. Cambio file e cambio step: nessuna zona residua, nessuna crescita di memoria dopo dieci cambi.
 7. Commento a livello file / reso orfano da un push → compare nella zona sopra la prima riga.
 8. Toggle inline ↔ side-by-side: le zone si rimontano correttamente e un thread sul lato base passa dalla zona in cima (inline) alla riga giusta dell'editor originale (side-by-side).
@@ -673,17 +673,17 @@ La preferenza di layout è per sessione: la persistenza per-utente in `Extension
 
 ### Sul comportamento funzionale
 
-- **Q5 — Il thread-ledger nella discussione.** Il tab deve nasconderlo dalla lista dei normali commenti o mostrarlo come registro separato e consultabile?
-- **Q6 — Glob nel piano.** Vuoi supportare voci tipo `src/Core/**` o `src/Core/` oltre ai path esatti? Su PR da 100+ file fa una differenza pratica notevole per chi scrive il commento.
-- **Q7 — Chi può fare cosa.** Un utente che **non** è reviewer della PR può aprire il tab in lettura? E può commentare o approvare step?
+- **Q5, Il thread-ledger nella discussione.** Il tab deve nasconderlo dalla lista dei normali commenti o mostrarlo come registro separato e consultabile?
+- **Q6, Glob nel piano.** Vuoi supportare voci tipo `src/Core/**` o `src/Core/` oltre ai path esatti? Su PR da 100+ file fa una differenza pratica notevole per chi scrive il commento.
+- **Q7, Chi può fare cosa.** Un utente che **non** è reviewer della PR può aprire il tab in lettura? E può commentare o approvare step?
 
 ### Su processo e ambiente
 
-- **Q11 — Org di test.** Hai già un'organizzazione Azure DevOps personale utilizzabile per lo sviluppo, o va creata? E hai un secondo account per i test multi-reviewer?
-- **Q12 — Chi amministra l'org aziendale.** Sai già chi può installare estensioni sull'organizzazione del team? Conviene coinvolgerlo **presto**, non a lavoro finito.
-- **Q13 — Azure DevOps Server on-prem.** Va supportato anche l'on-prem, o solo `dev.azure.com` cloud? (Il contribution point esiste anche lì, ma il Marketplace e alcune API cambiano.)
-- **Q14 — Scope `vso.work`.** Serve davvero mostrare i work item collegati? Toglierlo riduce gli scope richiesti e semplifica l'approvazione dell'admin.
-- **Q16 — L'estensione deve saper *scrivere* il piano?** Deciso che il marker è obbligatorio (§0), resta da capire quanto aiutare chi lo scrive: (a) niente, l'autore scrive il commento a mano; (b) un pulsante **"Copy template"** che copia negli appunti lo scheletro con i file della PR già elencati; (c) un pulsante **"Create review plan"** che crea direttamente il thread nella PR, con eventuale editor degli step dentro il tab. La (b) costa poco ed elimina quasi del tutto il rischio "marker dimenticato"; la (c) è la più comoda ma allarga lo scope della v1.
+- **Q11, Org di test.** Hai già un'organizzazione Azure DevOps personale utilizzabile per lo sviluppo, o va creata? E hai un secondo account per i test multi-reviewer?
+- **Q12, Chi amministra l'org aziendale.** Sai già chi può installare estensioni sull'organizzazione del team? Conviene coinvolgerlo **presto**, non a lavoro finito.
+- **Q13, Azure DevOps Server on-prem.** Va supportato anche l'on-prem, o solo `dev.azure.com` cloud? (Il contribution point esiste anche lì, ma il Marketplace e alcune API cambiano.)
+- **Q14, Scope `vso.work`.** Serve davvero mostrare i work item collegati? Toglierlo riduce gli scope richiesti e semplifica l'approvazione dell'admin.
+- **Q16, L'estensione deve saper *scrivere* il piano?** Deciso che il marker è obbligatorio (§0), resta da capire quanto aiutare chi lo scrive: (a) niente, l'autore scrive il commento a mano; (b) un pulsante **"Copy template"** che copia negli appunti lo scheletro con i file della PR già elencati; (c) un pulsante **"Create review plan"** che crea direttamente il thread nella PR, con eventuale editor degli step dentro il tab. La (b) costa poco ed elimina quasi del tutto il rischio "marker dimenticato"; la (c) è la più comoda ma allarga lo scope della v1.
 
 ---
 
@@ -707,10 +707,10 @@ La stima va aggiornata dopo aver predisposto org, utenti e PR fixture: il protoc
 
 ## Fonti
 
-- [Extensibility Points — Azure DevOps](https://learn.microsoft.com/en-us/azure/devops/extend/reference/targets/overview?view=azure-devops) (contribution point `ms.vss-code-web.pr-tabs`)
+- [Extensibility Points, Azure DevOps](https://learn.microsoft.com/en-us/azure/devops/extend/reference/targets/overview?view=azure-devops) (contribution point `ms.vss-code-web.pr-tabs`)
 - [Extension manifest reference](https://learn.microsoft.com/en-us/azure/devops/extend/develop/manifest?view=azure-devops) (scope, `baseUri`, flag public/private)
 - [Authenticate and secure web extensions](https://learn.microsoft.com/en-us/azure/devops/extend/develop/auth?view=azure-devops) (chiamate per conto dell'utente corrente)
 - [Package and publish extensions](https://learn.microsoft.com/en-us/azure/devops/extend/publish/overview?view=azure-devops) (publisher, privata/pubblica, condivisione, installazione, debug con `baseUri`)
 - [Add tabs on query result pages](https://learn.microsoft.com/en-us/azure/devops/extend/develop/add-query-result-tabs?view=azure-devops) (contratto delle tab contribution)
-- [Pull Request Comment Likes — REST API 7.1](https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-comment-likes?view=azure-devops-rest-7.1)
+- [Pull Request Comment Likes, REST API 7.1](https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-comment-likes?view=azure-devops-rest-7.1)
 - [microsoft/azure-devops-extension-sdk](https://github.com/microsoft/azure-devops-extension-sdk) · [microsoft/azure-devops-extension-api](https://github.com/microsoft/azure-devops-extension-api) · [microsoft/azure-devops-extension-sample](https://github.com/microsoft/azure-devops-extension-sample)

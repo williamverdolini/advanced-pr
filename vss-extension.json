@@ -6,6 +6,7 @@
   "name": "Advanced PR Review",
   "description": "Review large pull requests in explicit steps, with comments inline in the diff.",
   "public": false,
+  "icons": { "default": "images/icon.png" },
   "categories": ["Azure Repos"],
   "tags": ["pull request", "code review", "git", "diff", "comments"],
   "targets": [{ "id": "Microsoft.VisualStudio.Services" }],
@@ -33,6 +34,6 @@
   "content": { "details": { "path": "overview.md" } },
   "files": [
     { "path": "dist", "addressable": true },
-    { "path": "overview.md" }
+    { "path": "images/icon.png", "addressable": true }
   ]
 }

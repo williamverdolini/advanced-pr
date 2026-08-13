@@ -63,7 +63,7 @@ export interface PullRequestWorkspace {
   plan: StepPlan;
   /**
    * Thread the review events are appended to. It is the plan thread when a plan
-   * exists, otherwise the general thread that already holds events — a pull
+   * exists, otherwise the general thread that already holds events. A pull
    * request without a plan still has one reviewable step, so it still needs a
    * ledger. Undefined until the first event creates one.
    */

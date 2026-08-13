@@ -15,8 +15,8 @@ export type MarkdownBlock =
 /**
  * The subset of Markdown the comment editor can produce, parsed into a tree of
  * plain values. Nothing here yields HTML: the renderer builds React elements,
- * so comment text — which is authored by other users and displayed inside an
- * iframe holding an Azure DevOps token — can never inject markup.
+ * so comment text, which is authored by other users and displayed inside an
+ * iframe holding an Azure DevOps token, can never inject markup.
  */
 export function parseMarkdown(text: string): MarkdownBlock[] {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");

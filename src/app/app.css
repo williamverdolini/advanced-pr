@@ -569,8 +569,8 @@ body,
   margin-right: 8px;
 }
 
-/* Same box model as `.bolt-button` — inherited font, 6px/12px padding, height
-   driven by the content — so the segmented control lines up with the command
+/* Same box model as `.bolt-button`: inherited font, 6px/12px padding, height
+   driven by the content, so the segmented control lines up with the command
    bar button beside it instead of being measured separately. */
 .diff-layout-switch button {
   padding: 6px 12px;
@@ -607,7 +607,7 @@ body,
    icon rather than a status dot. `FluentRegular` is already loaded by the
    azure-devops-ui icon styles; its own `ms-Icon--*` rules cannot be reused
    here because they require a `.fluent-icons-enabled` ancestor, which the
-   glyph margin — owned by Monaco — does not have. */
+   glyph margin, owned by Monaco, does not have. */
 .guided-review-thread-glyph-open,
 .guided-review-thread-glyph-resolved {
   display: flex !important;

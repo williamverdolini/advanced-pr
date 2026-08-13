@@ -209,8 +209,8 @@ function Workspace({ workspace, reviewerId, onRefresh }: WorkspaceProps): React.
   // `Everything else`, treated exactly like any other.
   const signOffReady = canApprovePullRequest(reviewState, reviewerId, stepRequirements);
   // The ledger is append-only, so a past `pr-approved` never disappears. The
-  // vote on the pull request is the source of truth: if it was reset — here or
-  // in the classic UI, which writes no event — the sign-off is offered again.
+  // vote on the pull request is the source of truth: if it was reset (here or
+  // in the classic UI, which writes no event), the sign-off is offered again.
   const signOffInEffect =
     reviewState.pullRequestDecisions.get(reviewerId) === "approved" &&
     currentReviewerVote === 10;
@@ -292,7 +292,7 @@ function Workspace({ workspace, reviewerId, onRefresh }: WorkspaceProps): React.
   const selectedThreadPosition = fileThreads.find(
     (thread) => thread.id === selectedThreadId,
   )?.position;
-  // Only a new selection may scroll the diff — a refresh must leave it alone.
+  // Only a new selection may scroll the diff; a refresh must leave it alone.
   const revealTarget = React.useMemo(
     () =>
       selectedThreadPosition && visibleSides.includes(selectedThreadPosition.side)
@@ -357,10 +357,10 @@ function Workspace({ workspace, reviewerId, onRefresh }: WorkspaceProps): React.
       await appendLedgerEvent(
         workspace,
         kind === "step-approved"
-          ? `✅ **Step approved — \`${step.title}\`**`
+          ? `✅ **Step approved: \`${step.title}\`**`
           : kind === "step-changes-requested"
-            ? `⚠️ **Changes requested — \`${step.title}\`**`
-            : `↩ **Step reset — \`${step.title}\`**`,
+            ? `⚠️ **Changes requested: \`${step.title}\`**`
+            : `↩ **Step reset: \`${step.title}\`**`,
         {
           eventId: crypto.randomUUID(),
           kind,
@@ -547,7 +547,7 @@ function Workspace({ workspace, reviewerId, onRefresh }: WorkspaceProps): React.
   }, []);
 
   // A click in the glyph margin comments the whole line, unless it lands inside
-  // a live selection — then the selected range is what gets anchored.
+  // a live selection, in which case the selected range is what gets anchored.
   const requestComment = React.useCallback((anchor: DiffSelection): void => {
     const selection = selectionRef.current;
     const withinSelection =
@@ -586,7 +586,7 @@ function Workspace({ workspace, reviewerId, onRefresh }: WorkspaceProps): React.
       renderButton: () =>
         contentOnly ? (
           <span className="diff-toolbar-note" key="diff-layout">
-            {contentSide === "left" ? "Deleted file — previous contents" : "New file — full contents"}
+            {contentSide === "left" ? "Deleted file: previous contents" : "New file: full contents"}
           </span>
         ) : (
           <div className="diff-layout-switch" role="group" aria-label="Diff layout" key="diff-layout">
@@ -914,7 +914,7 @@ function Workspace({ workspace, reviewerId, onRefresh }: WorkspaceProps): React.
       />
       {explainExpanded && selectedStep?.explanation && (
         <Dialog
-          titleProps={{ text: `Explain — ${selectedStep.title}` }}
+          titleProps={{ text: `Explain: ${selectedStep.title}` }}
           // The point of the dialog is room to read: 800px, narrowing to 80% of
           // the viewport below 1024px.
           contentSize={ContentSize.ExtraLarge}
@@ -947,8 +947,8 @@ function Workspace({ workspace, reviewerId, onRefresh }: WorkspaceProps): React.
 
 /**
  * Approving the last step is not a vote (§5.3): the whole pull request is a
- * separate, explicit decision, and this dialog is where it is stated — with
- * what it covers, and what it does to the reviewer's global vote.
+ * separate, explicit decision, and this dialog is where it is stated, with
+ * what it covers and what it does to the reviewer's global vote.
  */
 function SignOffDialog({
   workspace,
@@ -981,14 +981,14 @@ function SignOffDialog({
       ]}
     >
       <p>
-        You are approving the whole pull request — {reviewedSteps.length}{" "}
+        You are approving the whole pull request: {reviewedSteps.length}{" "}
         {reviewedSteps.length === 1 ? "step" : "steps"}, {workspace.files.length}{" "}
         {workspace.files.length === 1 ? "file" : "files"}.
       </p>
       <p>
         Your vote on the pull request becomes <strong>Approved</strong>
         {currentVote !== undefined && currentVote !== 0 && (
-          <> — it is currently {describeVote(currentVote)}</>
+          <> (it is currently {describeVote(currentVote)})</>
         )}
         .
       </p>
@@ -1061,7 +1061,7 @@ function createPlanTemplate(workspace: PullRequestWorkspace): string {
   return [
     "1. Review step",
     "### Explain",
-    "Optional notes about this step — delete this block if you do not need it.",
+    "Optional notes about this step. Delete this block if you do not need it.",
     "",
     ...workspace.files.map((file) => `- ${file.path}`),
   ].join("\n");
@@ -1132,7 +1132,7 @@ function InlineThreadCard({
           subtle
           iconProps={{ iconName: "ChevronUp" }}
           ariaLabel="Collapse this comment"
-          tooltipProps={{ text: "Collapse — reopen it from the comment icon in the margin" }}
+          tooltipProps={{ text: "Collapse. Reopen it from the comment icon in the margin" }}
           onClick={onCollapse}
         />
       </header>
@@ -1204,7 +1204,7 @@ function InlineThreadCard({
               <Button
                 subtle
                 iconProps={{ iconName: likedByMe ? "LikeSolid" : "Like" }}
-                ariaLabel={`${likedByMe ? "Remove like" : "Like"} — ${rootComment.likeCount} so far`}
+                ariaLabel={`${likedByMe ? "Remove like" : "Like"}, ${rootComment.likeCount} so far`}
                 tooltipProps={{
                   text: `${likedByMe ? "Remove like" : "Like"} (${rootComment.likeCount})`,
                 }}

@@ -30,7 +30,7 @@ export function classifyFileChange(changeType: number | undefined): FileChangeKi
     return "add";
   }
 
-  // Everything else — plain Edit, Encoding, Property — reads as a modification.
+  // Everything else (plain Edit, Encoding, Property) reads as a modification.
   return "edit";
 }
 
