@@ -1,0 +1,613 @@
+import * as React from "react";
+import * as ReactDOM from "react-dom";
+import * as monaco from "monaco-editor";
+import { observeHostTheme } from "../platform/hostTheme";
+import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
+import CssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
+import HtmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
+import JsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
+import TypeScriptWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
+
+type MonacoGlobal = typeof globalThis & {
+  MonacoEnvironment?: { getWorker: (_moduleId: string, label: string) => Worker };
+};
+
+(globalThis as MonacoGlobal).MonacoEnvironment = {
+  getWorker: (_moduleId, label) => {
+    if (label === "json") {
+      return new JsonWorker();
+    }
+    if (label === "css" || label === "scss" || label === "less") {
+      return new CssWorker();
+    }
+    if (label === "html" || label === "handlebars" || label === "razor") {
+      return new HtmlWorker();
+    }
+    if (label === "typescript" || label === "javascript") {
+      return new TypeScriptWorker();
+    }
+    return new EditorWorker();
+  },
+};
+
+export interface DiffViewerProps<TZone extends DiffZoneAnchor> {
+  original: string;
+  modified: string;
+  language: string;
+  filePath: string;
+  /**
+   * Inline regions to mount inside the diff, one view zone each. Identity is
+   * carried by `key`: an anchor that keeps its key keeps its DOM node, and with
+   * it the React state of whatever `renderZone` puts inside (reply drafts,
+   * expanded state). Must be memoized by the caller.
+   */
+  zones?: readonly TZone[];
+  renderZone?: (zone: TZone) => React.ReactNode;
+  /** Inline (unified) by default; side by side renders the original editor. */
+  renderSideBySide?: boolean;
+  /**
+   * Renders one side in a plain read-only editor instead of a diff. Used for
+   * files that exist on a single side: an added file shows its new content, a
+   * deleted one what it used to hold.
+   */
+  singleFile?: boolean;
+  /** Which side the single editor shows. Ignored when rendering a diff. */
+  singleFileSide?: DiffSideKey;
+  threadDecorations?: readonly DiffThreadDecoration[];
+  selectedThreadId?: number;
+  revealTarget?: DiffRevealTarget;
+  onSelectionChange?: (selection: DiffSelection | undefined) => void;
+  /** Fired by the "add comment" affordance in the glyph margin. */
+  onRequestComment?: (anchor: DiffSelection) => void;
+  /** Fired when the glyph of an existing thread is clicked. */
+  onSelectThread?: (threadId: number) => void;
+}
+
+export interface DiffZoneAnchor {
+  key: string;
+  side: "left" | "right";
+  /** 0 mounts the zone above the first line — used for file-level threads. */
+  afterLineNumber: number;
+}
+
+export interface DiffThreadDecoration {
+  id: number;
+  side: "left" | "right";
+  line: number;
+  isOpen: boolean;
+}
+
+export interface DiffRevealTarget {
+  side: "left" | "right";
+  line: number;
+}
+
+export interface DiffSelection {
+  side: "left" | "right";
+  startLine: number;
+  startOffset: number;
+  endLine: number;
+  endOffset: number;
+}
+
+type DiffSideKey = "left" | "right";
+
+/**
+ * Hides whether the content is shown as a diff or as a single file, so zones,
+ * decorations and glyph handling have one code path.
+ */
+interface EditorHandle {
+  readonly kind: "diff" | "single";
+  /** The only side rendered in single mode; both sides exist in diff mode. */
+  readonly side: DiffSideKey;
+  sideEditor(side: DiffSideKey): monaco.editor.ICodeEditor;
+  setModels(models: { original?: monaco.editor.ITextModel; modified: monaco.editor.ITextModel }): void;
+  clearModels(): void;
+  setSideBySide(value: boolean): void;
+  dispose(): void;
+}
+
+interface MountedZone {
+  key: string;
+  zoneId: string;
+  side: "left" | "right";
+  afterLineNumber: number;
+  /** Owned by Monaco: its height is driven by `zone.heightInPx`. */
+  container: HTMLElement;
+  /** Content-sized wrapper: measured by the observer, target of the portal. */
+  content: HTMLElement;
+  zone: monaco.editor.IViewZone;
+  height: number;
+  dispose: () => void;
+}
+
+const noZones: readonly never[] = [];
+
+/**
+ * Zones must never be created with a height of 0: Monaco hides whitespaces it
+ * does not consider visible, a hidden element has no box, and a ResizeObserver
+ * never reports on it — the zone would stay collapsed forever, and clicks over
+ * its area would be handled as clicks on the code underneath.
+ */
+const provisionalZoneHeight = 120;
+
+export function DiffViewer<TZone extends DiffZoneAnchor>({
+  original,
+  modified,
+  language,
+  filePath,
+  zones = noZones,
+  renderZone,
+  renderSideBySide = false,
+  singleFile = false,
+  singleFileSide = "right",
+  threadDecorations = [],
+  selectedThreadId,
+  revealTarget,
+  onSelectionChange,
+  onRequestComment,
+  onSelectThread,
+}: DiffViewerProps<TZone>): React.ReactElement {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const editorRef = React.useRef<EditorHandle>();
+  const modelsRef = React.useRef<monaco.editor.ITextModel[]>([]);
+  const decorationCollectionsRef = React.useRef<monaco.editor.IEditorDecorationsCollection[]>([]);
+  const mountedZonesRef = React.useRef(new Map<string, MountedZone>());
+  const measuredNodesRef = React.useRef(new Map<Element, MountedZone>());
+  const observerRef = React.useRef<ResizeObserver>();
+  const hoverCollectionsRef = React.useRef<
+    Partial<Record<DiffSideKey, monaco.editor.IEditorDecorationsCollection>>
+  >({});
+  /** line number → thread id, per side: drives both the glyph click and the "+". */
+  const commentedLinesRef = React.useRef<Record<DiffSideKey, ReadonlyMap<number, number>>>({
+    left: new Map(),
+    right: new Map(),
+  });
+  const [zoneNodes, setZoneNodes] = React.useState<ReadonlyMap<string, HTMLElement>>(new Map());
+
+  // Editor creation must happen exactly once: recreating it would drop every
+  // mounted zone. Callbacks therefore travel through a ref instead of deps.
+  const callbacksRef = React.useRef({ onSelectionChange, onRequestComment, onSelectThread });
+
+  React.useEffect(() => {
+    callbacksRef.current = { onSelectionChange, onRequestComment, onSelectThread };
+  });
+
+  React.useEffect(() => {
+    if (!containerRef.current) {
+      return;
+    }
+
+    const measuredNodes = measuredNodesRef.current;
+    const mountedZones = mountedZonesRef.current;
+
+    const stopThemeObserver = observeHostTheme((theme) =>
+      monaco.editor.setTheme(theme === "dark" ? "vs-dark" : "vs"),
+    );
+
+    const editor = createEditorHandle(containerRef.current, singleFile, singleFileSide);
+    editorRef.current = editor;
+    const sides = editorSides(editor);
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const mounted = measuredNodesRef.current.get(entry.target);
+        if (!mounted) {
+          continue;
+        }
+
+        // A measurement of 0 means the zone is not rendered right now; keeping
+        // the previous height avoids collapsing it into an unrecoverable state.
+        const height = Math.ceil((entry.target as HTMLElement).offsetHeight);
+        if (height <= 0 || height === mounted.height) {
+          continue;
+        }
+
+        mounted.height = height;
+        mounted.zone.heightInPx = height;
+        editor.sideEditor(mounted.side).changeViewZones((accessor) =>
+          accessor.layoutZone(mounted.zoneId),
+        );
+      }
+    });
+    observerRef.current = observer;
+
+    const glyphMarginLine = (event: monaco.editor.IEditorMouseEvent): number | undefined =>
+      event.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN
+        ? event.target.position?.lineNumber
+        : undefined;
+
+    const handleGlyphClick = (
+      side: DiffSideKey,
+      event: monaco.editor.IEditorMouseEvent,
+    ): void => {
+      const line = glyphMarginLine(event);
+      if (line === undefined) {
+        return;
+      }
+
+      const threadId = commentedLinesRef.current[side].get(line);
+      if (threadId !== undefined) {
+        callbacksRef.current.onSelectThread?.(threadId);
+        return;
+      }
+
+      const model = editor.sideEditor(side).getModel();
+      callbacksRef.current.onRequestComment?.({
+        side,
+        startLine: line,
+        startOffset: 1,
+        endLine: line,
+        endOffset: (model?.getLineLength(line) ?? 0) + 1,
+      });
+    };
+
+    // A single decoration marks where a comment can be added, so every line
+    // offers the affordance without paying for one decoration per line. It
+    // follows the pointer down the glyph margin, and stays pinned to the last
+    // line of a selection so selected code always has a visible target.
+    const hovered: Partial<Record<DiffSideKey, number>> = {};
+    const pinned: Partial<Record<DiffSideKey, number>> = {};
+
+    const refreshAddAffordance = (side: DiffSideKey): void => {
+      const line = hovered[side] ?? pinned[side];
+      const target =
+        line !== undefined && !commentedLinesRef.current[side].has(line)
+          ? [createAddCommentDecoration(line)]
+          : [];
+      const collection = hoverCollectionsRef.current[side];
+      if (collection) {
+        collection.set(target);
+        return;
+      }
+
+      hoverCollectionsRef.current[side] = editor
+        .sideEditor(side)
+        .createDecorationsCollection(target);
+    };
+
+    const subscriptions = sides.flatMap((side) => {
+      const codeEditor = editor.sideEditor(side);
+      return [
+        codeEditor.onDidChangeCursorSelection((event) => {
+          const selection = mapSelection(side, event.selection);
+          callbacksRef.current.onSelectionChange?.(selection);
+          pinned[side] = selection?.endLine;
+          refreshAddAffordance(side);
+        }),
+        codeEditor.onMouseDown((event) => handleGlyphClick(side, event)),
+        codeEditor.onMouseMove((event) => {
+          hovered[side] = glyphMarginLine(event);
+          refreshAddAffordance(side);
+        }),
+        codeEditor.onMouseLeave(() => {
+          hovered[side] = undefined;
+          refreshAddAffordance(side);
+        }),
+      ];
+    });
+
+    return () => {
+      subscriptions.forEach((subscription) => subscription.dispose());
+      stopThemeObserver();
+      Object.values(hoverCollectionsRef.current).forEach((collection) => collection?.clear());
+      hoverCollectionsRef.current = {};
+      observer.disconnect();
+      observerRef.current = undefined;
+      measuredNodes.clear();
+      mountedZones.forEach((mounted) => mounted.dispose());
+      mountedZones.clear();
+      decorationCollectionsRef.current.forEach((collection) => collection.clear());
+      decorationCollectionsRef.current = [];
+      editorRef.current = undefined;
+      editor.dispose();
+    };
+  }, [singleFile, singleFileSide]);
+
+  React.useEffect(() => {
+    editorRef.current?.setSideBySide(renderSideBySide);
+  }, [renderSideBySide]);
+
+  React.useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+
+    modelsRef.current.forEach((model) => model.dispose());
+    const encodedPath = encodeURIComponent(filePath);
+    const modifiedModel = monaco.editor.createModel(
+      modified,
+      language,
+      monaco.Uri.parse(`inmemory://advanced-pr/modified/${encodedPath}`),
+    );
+    // Created for the diff, and for a single editor showing the base side.
+    const originalModel =
+      editor.kind === "diff" || editor.side === "left"
+        ? monaco.editor.createModel(
+            original,
+            language,
+            monaco.Uri.parse(`inmemory://advanced-pr/original/${encodedPath}`),
+          )
+        : undefined;
+    modelsRef.current = originalModel ? [originalModel, modifiedModel] : [modifiedModel];
+    editor.setModels({ original: originalModel, modified: modifiedModel });
+
+    return () => {
+      if (editorRef.current === editor) {
+        editor.clearModels();
+      }
+      modelsRef.current.forEach((model) => model.dispose());
+      modelsRef.current = [];
+    };
+  }, [filePath, language, modified, original]);
+
+  React.useEffect(() => {
+    const editor = editorRef.current;
+    const observer = observerRef.current;
+    if (!editor || !observer) {
+      return;
+    }
+
+    const mounted = mountedZonesRef.current;
+    const desired = new Map(zones.map((anchor) => [anchor.key, anchor]));
+    let changed = false;
+
+    for (const [key, zone] of [...mounted]) {
+      const anchor = desired.get(key);
+      if (!anchor) {
+        zone.dispose();
+        measuredNodesRef.current.delete(zone.content);
+        mounted.delete(key);
+        changed = true;
+      } else if (anchor.side !== zone.side || anchor.afterLineNumber !== zone.afterLineNumber) {
+        relocateZone(editor, zone, anchor);
+      }
+    }
+
+    for (const anchor of zones) {
+      if (mounted.has(anchor.key)) {
+        continue;
+      }
+
+      const zone = createZone(editor, anchor);
+      observer.observe(zone.content);
+      measuredNodesRef.current.set(zone.content, zone);
+      mounted.set(anchor.key, zone);
+      changed = true;
+    }
+
+    if (changed) {
+      setZoneNodes(new Map([...mounted].map(([key, zone]) => [key, zone.content])));
+    }
+  }, [zones]);
+
+  React.useEffect(() => {
+    if (!revealTarget) {
+      return;
+    }
+
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+
+    editor.sideEditor(revealTarget.side).revealLineInCenter(Math.max(1, revealTarget.line));
+  }, [revealTarget]);
+
+  React.useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+
+    const sides = editorSides(editor);
+    const bySide = new Map(
+      sides.map((side) => [side, threadDecorations.filter((thread) => thread.side === side)]),
+    );
+    commentedLinesRef.current = {
+      left: new Map((bySide.get("left") ?? []).map((thread) => [thread.line, thread.id])),
+      right: new Map((bySide.get("right") ?? []).map((thread) => [thread.line, thread.id])),
+    };
+
+    decorationCollectionsRef.current.forEach((collection) => collection.clear());
+    decorationCollectionsRef.current = sides.map((side) =>
+      editor
+        .sideEditor(side)
+        .createDecorationsCollection(
+          createThreadDecorations(bySide.get(side) ?? [], selectedThreadId),
+        ),
+    );
+
+    return () => {
+      decorationCollectionsRef.current.forEach((collection) => collection.clear());
+      decorationCollectionsRef.current = [];
+    };
+  }, [filePath, selectedThreadId, threadDecorations]);
+
+  const anchorsByKey = new Map(zones.map((anchor) => [anchor.key, anchor]));
+
+  return (
+    <div ref={containerRef} className="diff-editor" aria-label={`Diff for ${filePath}`}>
+      {renderZone &&
+        [...zoneNodes].map(([key, node]) => {
+          const anchor = anchorsByKey.get(key);
+          return anchor ? ReactDOM.createPortal(renderZone(anchor), node, key) : null;
+        })}
+    </div>
+  );
+}
+
+function createZone(editor: EditorHandle, anchor: DiffZoneAnchor): MountedZone {
+  const container = document.createElement("div");
+  container.className = "advanced-pr-zone";
+  const content = document.createElement("div");
+  content.className = "advanced-pr-zone-content";
+  container.appendChild(content);
+
+  // The zone lives inside the editor's DOM, so Monaco's keybinding service sees
+  // every keystroke typed in a reply box (arrows move the cursor, Ctrl+F opens
+  // the find widget). Stopping the native key events here shields the editor.
+  // Consequence: React's document-level delegation never sees them either, so
+  // components rendered inside a zone must not rely on React key handlers.
+  const stopKeys = (event: Event): void => event.stopPropagation();
+  container.addEventListener("keydown", stopKeys);
+  container.addEventListener("keyup", stopKeys);
+  container.addEventListener("keypress", stopKeys);
+
+  const zone: monaco.editor.IViewZone = {
+    afterLineNumber: anchor.afterLineNumber,
+    heightInPx: provisionalZoneHeight,
+    domNode: container,
+    // Must stay false despite the name: when set, Monaco preventDefaults the
+    // mouse down, pulls focus to its own textarea and starts a drag selection,
+    // so buttons and inputs inside the zone never receive the interaction.
+    suppressMouseDown: false,
+  };
+
+  let zoneId = "";
+  editor.sideEditor(anchor.side).changeViewZones((accessor) => {
+    zoneId = accessor.addZone(zone);
+  });
+
+  const mounted: MountedZone = {
+    key: anchor.key,
+    zoneId,
+    side: anchor.side,
+    afterLineNumber: anchor.afterLineNumber,
+    container,
+    content,
+    zone,
+    height: provisionalZoneHeight,
+    dispose: () => {
+      container.removeEventListener("keydown", stopKeys);
+      container.removeEventListener("keyup", stopKeys);
+      container.removeEventListener("keypress", stopKeys);
+      editor.sideEditor(mounted.side).changeViewZones((accessor) =>
+        accessor.removeZone(mounted.zoneId),
+      );
+    },
+  };
+
+  return mounted;
+}
+
+/**
+ * Moves a zone to a new line or to the other side of the diff while keeping the
+ * same DOM nodes, so the portal — and the React state inside it — survives.
+ */
+function relocateZone(
+  editor: EditorHandle,
+  mounted: MountedZone,
+  anchor: DiffZoneAnchor,
+): void {
+  if (anchor.side === mounted.side) {
+    mounted.zone.afterLineNumber = anchor.afterLineNumber;
+    mounted.afterLineNumber = anchor.afterLineNumber;
+    editor.sideEditor(mounted.side).changeViewZones((accessor) =>
+      accessor.layoutZone(mounted.zoneId),
+    );
+    return;
+  }
+
+  editor.sideEditor(mounted.side).changeViewZones((accessor) =>
+    accessor.removeZone(mounted.zoneId),
+  );
+  mounted.zone.afterLineNumber = anchor.afterLineNumber;
+  mounted.afterLineNumber = anchor.afterLineNumber;
+  mounted.side = anchor.side;
+  editor.sideEditor(anchor.side).changeViewZones((accessor) => {
+    mounted.zoneId = accessor.addZone(mounted.zone);
+  });
+}
+
+function createEditorHandle(
+  container: HTMLElement,
+  singleFile: boolean,
+  singleFileSide: DiffSideKey,
+): EditorHandle {
+  const shared = {
+    automaticLayout: true,
+    glyphMargin: true,
+    readOnly: true,
+    scrollBeyondLastLine: false,
+  };
+
+  if (singleFile) {
+    const editor = monaco.editor.create(container, shared);
+    return {
+      kind: "single",
+      side: singleFileSide,
+      sideEditor: () => editor,
+      setModels: ({ original, modified }) =>
+        editor.setModel(singleFileSide === "left" ? (original ?? modified) : modified),
+      clearModels: () => editor.setModel(null),
+      setSideBySide: () => undefined,
+      dispose: () => editor.dispose(),
+    };
+  }
+
+  const editor = monaco.editor.createDiffEditor(container, {
+    ...shared,
+    enableSplitViewResizing: true,
+  });
+  return {
+    kind: "diff",
+    side: "right",
+    sideEditor: (side) =>
+      side === "left" ? editor.getOriginalEditor() : editor.getModifiedEditor(),
+    setModels: ({ original, modified }) =>
+      original && editor.setModel({ original, modified }),
+    clearModels: () => editor.setModel(null),
+    setSideBySide: (value) => editor.updateOptions({ renderSideBySide: value }),
+    dispose: () => editor.dispose(),
+  };
+}
+
+/** A single editor has one side only; wiring "left" to it would duplicate work. */
+function editorSides(editor: EditorHandle): readonly DiffSideKey[] {
+  return editor.kind === "single" ? [editor.side] : ["left", "right"];
+}
+
+function createAddCommentDecoration(line: number): monaco.editor.IModelDeltaDecoration {
+  return {
+    range: new monaco.Range(line, 1, line, 1),
+    options: {
+      glyphMarginClassName: "guided-review-add-comment-glyph",
+      glyphMarginHoverMessage: { value: "Add a comment on this line" },
+    },
+  };
+}
+
+function createThreadDecorations(
+  threads: readonly DiffThreadDecoration[],
+  selectedThreadId: number | undefined,
+): monaco.editor.IModelDeltaDecoration[] {
+  return threads.map((thread) => ({
+    range: new monaco.Range(thread.line, 1, thread.line, 1),
+    options: {
+      isWholeLine: true,
+      className: thread.id === selectedThreadId ? "guided-review-thread-line-selected" : undefined,
+      glyphMarginClassName: thread.isOpen
+        ? "guided-review-thread-glyph-open"
+        : "guided-review-thread-glyph-resolved",
+      glyphMarginHoverMessage: {
+        value: thread.isOpen ? "Open review comment" : "Resolved review comment",
+      },
+    },
+  }));
+}
+
+function mapSelection(side: "left" | "right", selection: monaco.Selection): DiffSelection | undefined {
+  if (selection.isEmpty()) {
+    return undefined;
+  }
+
+  return {
+    side,
+    startLine: selection.startLineNumber,
+    startOffset: selection.startColumn,
+    endLine: selection.endLineNumber,
+    endOffset: selection.endColumn,
+  };
+}

@@ -1,0 +1,939 @@
+:root {
+  font-family: "Segoe UI", "-apple-system", BlinkMacSystemFont, Roboto, "Helvetica Neue", Helvetica, Ubuntu, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  color: var(--text-primary-color, rgba(0, 0, 0, 0.9));
+  /* Page background of the other Azure DevOps tabs: the surrounding surface is
+     neutral and the cards on top of it stay --background-color. The fallback
+     triple keeps local preview working, where the host palette is absent. */
+  background: rgba(var(--palette-neutral-2, 248, 248, 248), 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  /* Base size of the extension. It belongs on body, never on :root: `rem`
+     resolves against the root element, so setting it there would rescale every
+     other rem in this file. */
+  font-size: 0.75rem;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+/* Column flex all the way down instead of fixed grid tracks: the message cards
+   between the header and the workspace are conditional, and with a fixed track
+   list the workspace fell into an `auto` row whenever one was missing, leaving
+   the flexible row empty at the bottom. */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.app-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.workspace-shell {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.context-card {
+  max-width: 760px;
+}
+
+.review-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: grid;
+  /* Never squeezed by the workspace growing beside it. */
+  flex: 0 0 auto;
+  gap: 6px;
+  padding: 7px 8px;
+  background: rgba(var(--palette-neutral-2, 248, 248, 248), 1);
+  /* Hairlines above and below, like the section separators of the native pull
+     request chrome. */
+  box-shadow:
+    inset 0 1px 0 var(--palette-black-alpha-8, rgba(0, 0, 0, 8%)),
+    inset 0 -1px 0 var(--palette-black-alpha-8, rgba(0, 0, 0, 8%));
+}
+
+/* The host variable carries a black alpha, which disappears on a dark
+   background, so the dark theme states its own light hairline instead. */
+:root[data-theme="dark"] .review-header {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 12%),
+    inset 0 -1px 0 rgb(255 255 255 / 12%);
+}
+
+.review-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* Titles are shown in full while the bar has room and only shrink when it runs
+   out, so no width is capped up front. Wrapping is off for the same reason:
+   wrapped steps would take the height back instead of using the width. When
+   even shrinking is not enough the strip scrolls, so no step becomes
+   unreachable. */
+.step-wizard {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  list-style: none;
+}
+
+.step-wizard li {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.step-wizard li:not(:last-child)::after {
+  flex: 0 0 auto;
+  width: 14px;
+  margin-inline: 3px;
+  border-top: 1px solid rgba(var(--palette-neutral-8, 234, 234, 234), 1);
+  content: "";
+}
+
+.step-wizard button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 28px;
+  padding: 2px 2px 4px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.step-wizard li.active button {
+  border-bottom-color: var(--communication-background, #0078d4);
+  color: var(--text-primary-color, rgba(0, 0, 0, 0.9));
+  font-weight: 600;
+}
+
+.step-index {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgba(var(--palette-neutral-20, 200, 200, 200), 1);
+  border-radius: 50%;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+/* Filled like `.bolt-status-extended.success` in the library, which uses this
+   same token as the fill. Status tokens carry a whole colour, unlike the
+   palette ones, which carry a bare RGB triple and must be wrapped in rgba(). */
+.step-index.approved {
+  border-color: var(--component-status-success, rgba(85, 163, 98, 1));
+  color: var(--text-on-communication-background, rgba(255, 255, 255, 1));
+  background: var(--component-status-success, rgba(85, 163, 98, 1));
+}
+
+.step-index.changes-requested {
+  border-color: #a4262c;
+  color: #fff;
+  background: #a4262c;
+}
+
+.step-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.step-count {
+  flex: 0 0 auto;
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  font-size: 0.6875rem;
+}
+
+.toolbar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.feedback-icon-success {
+  color: var(--component-status-success, rgba(85, 163, 98, 1));
+}
+
+.feedback-icon-waiting {
+  color: #ca5010;
+}
+
+.feedback-icon-neutral {
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+}
+
+/* Layout comes from the azure-devops-ui Splitter, which brings its own flex
+   container and the draggable `vss-Splitter--divider`. */
+.review-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-pane {
+  display: flex;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.files-column {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The card headers ship with 16px above and below, which is a lot of height to
+   spend on a title inside panes this dense. */
+.bolt-header-default {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* Author notes for the selected step. Capped so a long explanation never
+   squeezes the file tree out of the pane; it scrolls on its own instead. */
+.explain-panel {
+  flex: 0 0 auto;
+  max-height: 40%;
+  overflow: auto;
+  border: 1px solid rgba(var(--palette-neutral-10, 218, 218, 218), 1);
+  border-left: 3px solid var(--communication-background, #0078d4);
+  background: var(--background-color, #fff);
+}
+
+.explain-panel > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.explain-panel > summary:hover {
+  background: rgba(var(--palette-neutral-4, 244, 244, 244), 1);
+}
+
+.explain-title {
+  font-weight: 600;
+}
+
+.explain-expand {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.explain-dialog-body {
+  max-height: 60vh;
+  padding: 4px 2px;
+  overflow: auto;
+}
+
+.explain-step {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  font-size: 0.6875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.explain-body {
+  padding: 0 10px 8px;
+  font-size: 0.75rem;
+}
+
+.files-pane,
+.diff-pane {
+  flex: 1 1 auto;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.files-pane .bolt-card-content,
+.diff-pane .bolt-card-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.file-tree {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 4px 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.file-tree ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.toolbar-plan-editor {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  padding-top: 4px;
+}
+
+.plan-editor textarea {
+  width: 100%;
+  min-height: 110px;
+  padding: 8px;
+  resize: vertical;
+  border: 1px solid rgba(var(--palette-neutral-20, 200, 200, 200), 1);
+  color: inherit;
+  background: var(--background-color, #fff);
+  font-family: "Cascadia Mono", Menlo, Consolas, "Courier New", monospace;
+  font-size: 0.75rem;
+}
+
+.plan-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.file-tree-row {
+  display: grid;
+  grid-template-columns: 24px 24px minmax(0, 1fr) auto;
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+  padding-right: 6px;
+  /* Transparent by default so selecting a row does not shift its content. */
+  border-left: 2px solid transparent;
+  border-bottom: 1px solid rgba(var(--palette-neutral-8, 234, 234, 234), 1);
+  font-size: 0.875rem;
+}
+
+/* Selected row of a grid, the same treatment the host uses for its lists. */
+.file-tree-row.selected {
+  border-left-color: var(--component-grid-focus-border-color, rgba(0, 120, 212, 1));
+  background-color: var(--component-grid-selected-row-color, rgba(222, 236, 249, 1));
+}
+
+.file-thread-count {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  background: rgba(var(--palette-neutral-8, 234, 234, 234), 1);
+  font-size: 0.625rem;
+  text-align: center;
+}
+
+.file-thread-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.file-thread-button {
+  display: grid;
+  grid-template-columns: 10px 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-height: 28px;
+  padding: 3px 8px 3px 58px;
+  border: 0;
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  background: transparent;
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.file-thread-button:hover,
+.file-thread-button:focus-visible,
+.file-thread-button.selected {
+  background: rgba(var(--palette-neutral-6, 239, 239, 239), 1);
+  outline: none;
+}
+
+.file-thread-button.selected {
+  box-shadow: inset 3px 0 var(--communication-background, #0078d4);
+  color: var(--text-primary-color, rgba(0, 0, 0, 0.9));
+}
+
+.thread-state {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.thread-state.open {
+  background: var(--communication-background, #0078d4);
+}
+
+.thread-state.resolved {
+  border: 1px solid rgba(var(--palette-neutral-20, 200, 200, 200), 1);
+  background: transparent;
+}
+
+.file-thread-line {
+  font-family: "Cascadia Mono", Menlo, Consolas, "Courier New", monospace;
+}
+
+.file-thread-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-tree-spacer {
+  width: 24px;
+}
+
+.file-tree-expand {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+}
+
+.file-tree-file,
+.file-tree-folder {
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 6px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  /* Stated rather than inherited: the folder rule below pulls the whole `font`
+     shorthand from its ancestors, so a bold ancestor would reach the tree. */
+  font-weight: normal;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.file-tree-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: "Cascadia Mono", Menlo, Consolas, "Courier New", monospace;
+}
+
+.file-tree-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A deleted file reads as gone at a glance, without opening it. */
+.file-tree-name.deleted {
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  text-decoration: line-through;
+}
+
+.change-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  font-family: "Segoe UI", "-apple-system", BlinkMacSystemFont, Roboto, "Helvetica Neue", Helvetica, Ubuntu, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.change-badge-add {
+  color: #0b6a0b;
+  background: rgb(16 124 16 / 14%);
+}
+
+.change-badge-delete {
+  color: #a4262c;
+  background: rgb(164 38 44 / 14%);
+}
+
+.change-badge-edit {
+  color: #855700;
+  background: rgb(202 80 16 / 14%);
+}
+
+.change-badge-rename {
+  color: var(--communication-foreground, #0078d4);
+  background: rgb(0 120 212 / 14%);
+}
+
+.diff-toolbar-note {
+  align-self: center;
+  margin-right: 8px;
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  font-size: 0.75rem;
+}
+
+.file-tree-folder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font: inherit;
+  font-weight: normal;
+}
+
+.file-tree-folder small {
+  flex: 0 0 auto;
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  font-size: 0.625rem;
+  font-weight: normal;
+}
+
+.file-tree-file:hover,
+.file-tree-file:focus-visible,
+.file-tree-folder:hover,
+.file-tree-folder:focus-visible {
+  background: rgba(var(--palette-neutral-6, 239, 239, 239), 1);
+  outline: none;
+}
+
+.diff-editor {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 300px;
+}
+
+/* Rendered inside the card header's command bar, so no padding or separator of
+   its own: the header already provides both. */
+.diff-layout-switch {
+  display: flex;
+  align-self: center;
+  margin-right: 8px;
+}
+
+/* Same box model as `.bolt-button` — inherited font, 6px/12px padding, height
+   driven by the content — so the segmented control lines up with the command
+   bar button beside it instead of being measured separately. */
+.diff-layout-switch button {
+  padding: 6px 12px;
+  border: 1px solid rgba(var(--palette-neutral-20, 200, 200, 200), 1);
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.diff-layout-switch button:first-child {
+  border-radius: 2px 0 0 2px;
+}
+
+.diff-layout-switch button:last-child {
+  border-radius: 0 2px 2px 0;
+  border-left-width: 0;
+}
+
+.diff-layout-switch button:hover {
+  background: rgba(var(--palette-neutral-6, 239, 239, 239), 1);
+}
+
+/* Selected, not primary: a filled accent would read as the main action of the
+   pane, which choosing a layout is not. */
+.diff-layout-switch button.active {
+  color: var(--text-primary-color, rgba(0, 0, 0, 0.9));
+  background: rgba(var(--palette-neutral-8, 234, 234, 234), 1);
+  font-weight: 600;
+}
+
+/* The glyph toggles its thread's inline section, so it reads as a comment
+   icon rather than a status dot. `FluentRegular` is already loaded by the
+   azure-devops-ui icon styles; its own `ms-Icon--*` rules cannot be reused
+   here because they require a `.fluent-icons-enabled` ancestor, which the
+   glyph margin — owned by Monaco — does not have. */
+.guided-review-thread-glyph-open,
+.guided-review-thread-glyph-resolved {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.guided-review-thread-glyph-open::before,
+.guided-review-thread-glyph-resolved::before {
+  content: "\f2fe";
+  font-family: FluentRegular, sans-serif;
+  font-size: 0.8125rem;
+  line-height: 1;
+}
+
+.guided-review-thread-glyph-open::before {
+  color: var(--communication-foreground, #0078d4);
+}
+
+.guided-review-thread-glyph-resolved::before {
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  opacity: 0.75;
+}
+
+.guided-review-thread-line-selected {
+  background: rgb(0 120 212 / 10%);
+}
+
+.guided-review-add-comment-glyph {
+  margin-left: 4px;
+  border-radius: 3px;
+  color: var(--communication-foreground, #0078d4);
+  background: rgba(var(--palette-neutral-8, 234, 234, 234), 1);
+  cursor: pointer;
+}
+
+.guided-review-add-comment-glyph::after {
+  content: "+";
+  display: block;
+  line-height: 16px;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* Monaco owns the outer node's height; the inner one is measured to drive it. */
+.advanced-pr-zone {
+  width: 100%;
+  overflow: hidden;
+  /* `.view-lines` is sized to the whole scroll area and comes after
+     `.view-zones` in the DOM, so without a stacking order it paints over the
+     zone and swallows every click. Monaco's own interactive zone widget
+     (`.monaco-editor .zone-widget`) uses this exact value for this reason.
+     Scrollbar slider and diff overview also sit at 10 but come later in the
+     DOM, so they keep winning the tie and stay usable. */
+  z-index: 10;
+}
+
+.advanced-pr-zone-content {
+  padding: 4px 12px 8px 20px;
+  /* Transparent so the strip around the card keeps the editor's own
+     background, which comes from the Monaco theme, not from the host page. */
+  background: transparent;
+}
+
+.inline-zone-stack {
+  display: grid;
+  gap: 6px;
+}
+
+.inline-zone-caption {
+  margin: 0;
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  font-size: 0.6875rem;
+}
+
+.inline-thread {
+  border: 1px solid rgba(var(--palette-neutral-10, 218, 218, 218), 1);
+  border-left: 3px solid rgba(var(--palette-neutral-20, 200, 200, 200), 1);
+  background: var(--background-color, #fff);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
+  cursor: default;
+}
+
+.inline-thread.selected {
+  border-left-color: var(--communication-background, #0078d4);
+}
+
+.inline-composer {
+  border-left-color: var(--communication-background, #0078d4);
+}
+
+.inline-thread > header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 4px 6px 4px 9px;
+  border-bottom: 1px solid rgba(var(--palette-neutral-8, 234, 234, 234), 1);
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  font-size: 0.6875rem;
+}
+
+.inline-thread > header strong {
+  color: var(--text-primary-color, rgba(0, 0, 0, 0.9));
+}
+
+.inline-thread-anchor {
+  margin-right: auto;
+}
+
+.inline-thread-comments section {
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(var(--palette-neutral-8, 234, 234, 234), 1);
+}
+
+.inline-thread-comments section:last-child {
+  border-bottom: 0;
+}
+
+.inline-comment-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  font-size: 0.6875rem;
+}
+
+.inline-comment-meta strong {
+  color: var(--text-primary-color, rgba(0, 0, 0, 0.9));
+  font-size: 0.75rem;
+}
+
+.markdown-body {
+  overflow-wrap: anywhere;
+}
+
+.markdown-body > :first-child {
+  margin-top: 0;
+}
+
+.markdown-body > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body pre,
+.markdown-body blockquote {
+  margin: 4px 0;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 20px;
+}
+
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin: 6px 0 3px;
+  font-size: 0.8125rem;
+}
+
+.markdown-body code {
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: rgba(var(--palette-neutral-8, 234, 234, 234), 1);
+  font-family: "Cascadia Mono", Menlo, Consolas, "Courier New", monospace;
+  font-size: 0.75rem;
+}
+
+.markdown-body pre {
+  padding: 7px 9px;
+  overflow-x: auto;
+  border-radius: 2px;
+  background: rgba(var(--palette-neutral-8, 234, 234, 234), 1);
+}
+
+.markdown-body pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.markdown-body blockquote {
+  padding-left: 9px;
+  border-left: 3px solid rgba(var(--palette-neutral-10, 218, 218, 218), 1);
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+}
+
+.markdown-body a {
+  color: var(--communication-foreground, #0078d4);
+}
+
+.markdown-preview {
+  padding: 6px 8px;
+  border: 1px dashed rgba(var(--palette-neutral-10, 218, 218, 218), 1);
+  border-radius: 2px;
+}
+
+.markdown-preview-label {
+  margin: 0 0 4px;
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.inline-thread-error {
+  margin: 0;
+  padding: 6px 10px;
+  color: var(--status-error-text, rgba(218, 10, 0, 1));
+  background: rgb(218 10 0 / 8%);
+}
+
+.inline-thread-actions {
+  display: flex;
+  gap: 6px;
+  padding: 6px 10px;
+  border-top: 1px solid rgba(var(--palette-neutral-8, 234, 234, 234), 1);
+}
+
+.empty-pane {
+  margin: 0;
+  padding: 24px 16px;
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  text-align: center;
+}
+
+.markdown-editor {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 5px;
+  padding: 6px 8px 8px;
+}
+
+.markdown-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.markdown-hint {
+  margin-left: auto;
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  font-size: 0.6875rem;
+}
+
+.markdown-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.markdown-input {
+  min-width: 0;
+}
+
+/* `.bolt-textfield-input` sets border, background and padding but never a
+   colour, and form controls do not inherit it: in the real Azure DevOps page
+   the product stylesheet supplies it, inside our iframe nothing does, so the
+   text stayed browser-default black and vanished on the dark theme. */
+.markdown-editor .bolt-textfield-input {
+  color: var(--text-primary-color, rgba(0, 0, 0, 0.9));
+}
+
+.context-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) minmax(0, 1fr);
+  gap: 10px 20px;
+  margin: 0;
+  padding: 16px 20px 20px;
+}
+
+.context-grid dt {
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  font-weight: 600;
+}
+
+.context-grid dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+  .app-content {
+    padding-inline: 12px;
+  }
+
+  .context-grid {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .context-grid dd {
+    margin-bottom: 10px;
+  }
+
+  .review-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .toolbar-actions {
+    justify-content: flex-start;
+  }
+
+  .toolbar-plan-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .file-tree {
+    height: auto;
+    max-height: 320px;
+  }
+
+  html,
+  body,
+  #root,
+  .app-shell,
+  .app-content,
+  .workspace-shell {
+    height: auto;
+    overflow: visible;
+  }
+}
+

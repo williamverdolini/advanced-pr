@@ -55,3 +55,17 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# Node and Azure DevOps extension artifacts
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+*.vsix
+*.pem
+*.pfx
+.env.*
+
+# Local code intelligence indexes
+.tokensave/
+
