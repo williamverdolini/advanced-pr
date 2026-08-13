@@ -4,19 +4,19 @@ An Azure DevOps web extension that adds a **Guided Review** tab to every pull re
 
 ## Why this exists
 
-Yes — big pull requests are a bad practice. I know. Split the work, keep each change small and self-contained, and everyone's life gets easier. That advice is right, and I am not arguing with it.
+Yes, big pull requests are a bad practice. I know. Split the work, keep each change small and self-contained, and everyone's life gets easier. That advice is right, and I am not arguing with it.
 
-It just keeps not happening. AI-assisted development on a large codebase tends to carry a change all the way through: the feature, the call sites it breaks, the tests, the fixtures, the tooling that had to follow, the docs that went stale. Cutting that apart into pull requests that are each autonomous *and* each internally consistent is sometimes possible, often expensive, and occasionally a bit of a fiction — three pull requests that only make sense once all three are merged aren't three reviews, they're one review wearing a disguise.
+It just keeps not happening. AI-assisted development on a large codebase tends to carry a change all the way through: the feature, the call sites it breaks, the tests, the fixtures, the tooling that had to follow, the docs that went stale. Cutting that apart into pull requests that are each autonomous *and* each internally consistent is sometimes possible, often expensive, and occasionally a bit of a fiction: three pull requests that only make sense once all three are merged aren't three reviews, they're one review wearing a disguise.
 
-So the problem worth solving isn't "make the pull request smaller". It's that **a reviewer has a limited budget of attention, and it should be spent where it changes the outcome.** The domain logic, the tricky boundary, the thing that will be hard to undo later — that deserves the budget. The regenerated fixtures, the baseline update, the tooling bump, the documentation pass: those deserve a glance, not a read, and pretending otherwise is how the important part ends up getting the tired half of someone's afternoon.
+So the problem worth solving isn't "make the pull request smaller". It's that **a reviewer has a limited budget of attention, and it should be spent where it changes the outcome.** The domain logic, the tricky boundary, the thing that will be hard to undo later: that deserves the budget. The regenerated fixtures, the baseline update, the tooling bump, the documentation pass: those deserve a glance, not a read, and pretending otherwise is how the important part ends up getting the tired half of someone's afternoon.
 
-That's what this extension is for. The author says, in the pull request itself, which blocks actually matter and in what order to read them — with a note explaining why — and everything else lands at the end, in one step, to be acknowledged rather than studied.
+That's what this extension is for. The author says, in the pull request itself, which blocks actually matter and in what order to read them, with a note explaining why, while everything else lands at the end, in one step, to be acknowledged rather than studied.
 
 Focus on what actually counts.
 
 ## What it does
 
-Instead of one long list of changed files, the reviewer works through one step at a time. Every decision is written back as a real pull request comment, so the classic Azure DevOps interface keeps showing the whole story — and there is **no backend, no database, and no stored credential** anywhere in the design.
+Instead of one long list of changed files, the reviewer works through one step at a time. Every decision is written back as a real pull request comment, so the classic Azure DevOps interface keeps showing the whole story. There is **no backend, no database, and no stored credential** anywhere in the design.
 
 **Splits the review into steps.** The author posts the plan as a comment on the pull request. Files not listed in any step fall into a final `Everything else` step, so nothing is left out. Without a plan the pull request has that one step, containing every file, and behaves exactly like any other step.
 
@@ -33,16 +33,16 @@ Start from `engine.ts`: everything else follows from it.
 
 The `### Explain` block is optional and purely descriptive: it is shown above the file list, and editing it never invalidates approvals already given.
 
-**Puts comments inside the diff.** Threads render under the line they refer to, with reply, edit, like and resolve in place. Markdown is rendered — with a live preview while writing — and the comment icon in the margin opens and closes each thread. The file tree lists threads under their file, so the same selection drives the tree, the margin and the editor.
+**Puts comments inside the diff.** Threads render under the line they refer to, with reply, edit, like and resolve in place. Markdown is rendered, with a live preview while writing, and the comment icon in the margin opens and closes each thread. The file tree lists threads under their file, so the same selection drives the tree, the margin and the editor.
 
 **Renders a diff that reads like the native one.** Monaco, unified by default with a side-by-side switch, following the host's light or dark theme. Added and deleted files are shown as plain content instead of a diff against nothing; the tree marks each file as added, modified, deleted or renamed, and tracks which ones you have viewed.
 
-**Records approvals as comments.** Approving a step appends an event to a thread-ledger; a deterministic reducer rebuilds the review state from those comments on every load, which is why no database is needed. Approving the last step asks whether to approve the whole pull request — the only action that changes your Azure DevOps vote. A push that changes a step's files invalidates that step's approval and only that one.
+**Records approvals as comments.** Approving a step appends an event to a thread-ledger; a deterministic reducer rebuilds the review state from those comments on every load, which is why no database is needed. Approving the last step asks whether to approve the whole pull request, the only action that changes your Azure DevOps vote. A push that changes a step's files invalidates that step's approval and only that one.
 
 ## What it does not do yet
 
-- **Reject the entire pull request** (`vote -10`) — approvals and change requests only.
-- **Build and policy checks**, and **linked work items** — read them in the native tabs.
+- **Reject the entire pull request** (`vote -10`): approvals and change requests only.
+- **Build and policy checks**, and **linked work items**: read them in the native tabs.
 - **Persist UI preferences** other than viewed files: diff layout and pane width reset with the session.
 
 The behaviour that still requires validation in a real Azure DevOps organization is listed in the [implementation plan](docs/azdo-extension-feasibility-plan.md), which is also the technical reference for every design decision summarised here.
@@ -65,13 +65,19 @@ Scopes are deliberately kept to this set. Adding one invalidates the extension c
 
 The extension is published privately under the **NebulaImprover** publisher:
 
-- Development extension: `NebulaImprover.advanced-pr-dev` (manifest `vss-extension.dev.json`, `baseUri: https://localhost:3000`)
-- Production extension: `NebulaImprover.advanced-pr` (manifest `vss-extension.json`, bundled `dist/`)
+- Production extension: `NebulaImprover.advanced-pr`, manifest `vss-extension.json`, with `dist/` bundled.
+- Development extension: `NebulaImprover.advanced-pr-dev`, with **two** manifests that take turns:
+  - `vss-extension.dev.json` loads from `baseUri: https://localhost:3000`, for hot reload;
+  - `vss-extension.dev-packaged.json` bundles `dist/` instead, to rehearse a release.
+
+The rehearsal exists because `baseUri` never exercises how the packaged bundle resolves its assets from the Marketplace CDN, and Azure DevOps allows no sideloading: publishing is the only way to find out. Doing it on the development extension ID spends a throwaway version number instead of a production one.
+
+Both development manifests share that one extension ID, and therefore one version line: after publishing the packaged variant as `0.1.5`, going back to hot reload means bumping `vss-extension.dev.json` to `0.1.6`, not republishing `0.1.4`.
 
 ## 1. Prerequisites
 
 1. Git and a current Node.js LTS release with npm.
-2. Access to an Azure DevOps **test** organization — never develop against the production one.
+2. Access to an Azure DevOps **test** organization. Never develop against the production one.
 3. Contributor rights on the `NebulaImprover` publisher, to publish.
 4. An organization administrator, or a user with **Manage extensions**, for the first installation.
 5. A second test user, for the concurrent-reviewer scenarios.
@@ -84,7 +90,7 @@ Set-Location advanced-pr
 npm ci
 ```
 
-Use `npm ci` rather than `npm install` for reproducible installs. Never commit `node_modules`, bundles, `.vsix` packages, certificates, tokens or local environment files — `.gitignore` already covers them.
+Use `npm ci` rather than `npm install` for reproducible installs. Never commit `node_modules`, bundles, `.vsix` packages, certificates, tokens or local environment files; `.gitignore` already covers them.
 
 ## 3. Validate a change
 
@@ -94,7 +100,7 @@ npm test
 npm run build
 ```
 
-Run all three before opening a pull request. Most of the value sits in the unit tests, because the parts worth testing are pure: plan parsing and canonical hashing, the event reducer and its idempotency, sign-off eligibility, inline zone layout, Markdown rendering, change-type classification and theme detection. Changes to comment anchors, votes or extension context also require a manual round-trip in the test organization — that round-trip is the only thing that proves the integration is real.
+Run all three before opening a pull request. Most of the value sits in the unit tests, because the parts worth testing are pure: plan parsing and canonical hashing, the event reducer and its idempotency, sign-off eligibility, inline zone layout, Markdown rendering, change-type classification and theme detection. Changes to comment anchors, votes or extension context also require a manual round-trip in the test organization, and that round-trip is the only thing that proves the integration is real.
 
 ## 4. Run it locally
 
@@ -113,8 +119,9 @@ If the tab is blank, check in this order: the dev server is serving `https://loc
 ## 5. Package
 
 ```powershell
-npx --package tfx-cli tfx extension create --manifest-globs vss-extension.dev.json   # development
-npx --package tfx-cli tfx extension create --manifest-globs vss-extension.json       # production
+npx --package tfx-cli tfx extension create --manifest-globs vss-extension.dev.json            # hot reload
+npx --package tfx-cli tfx extension create --manifest-globs vss-extension.dev-packaged.json   # rehearsal
+npx --package tfx-cli tfx extension create --manifest-globs vss-extension.json                # production
 ```
 
 Confirm in the output that publisher, extension ID and version are the expected ones. Every Marketplace update needs a version higher than the published one; versions cannot be rolled back by uploading an older package, so a faulty release is fixed by publishing a higher one.
@@ -133,7 +140,7 @@ npx --package tfx-cli tfx extension publish `
 
 `--rev-version` bumps and writes the manifest patch version even if a later step fails: review the manifest change before retrying, and commit it deliberately.
 
-Sharing only makes a private extension visible — it does not install it. From the extension page, select **Get it free**, choose the organization and install; an administrator must approve. Verify under **Organization settings → Extensions**.
+Sharing only makes a private extension visible; it does not install it. From the extension page, select **Get it free**, choose the organization and install; an administrator must approve. Verify under **Organization settings → Extensions**.
 
 ## 7. Before promoting a change
 

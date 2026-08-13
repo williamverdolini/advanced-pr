@@ -66,7 +66,7 @@ export interface DiffViewerProps<TZone extends DiffZoneAnchor> {
 export interface DiffZoneAnchor {
   key: string;
   side: "left" | "right";
-  /** 0 mounts the zone above the first line — used for file-level threads. */
+  /** 0 mounts the zone above the first line, for file-level threads. */
   afterLineNumber: number;
 }
 
@@ -126,7 +126,7 @@ const noZones: readonly never[] = [];
 /**
  * Zones must never be created with a height of 0: Monaco hides whitespaces it
  * does not consider visible, a hidden element has no box, and a ResizeObserver
- * never reports on it — the zone would stay collapsed forever, and clicks over
+ * never reports on it: the zone would stay collapsed forever, and clicks over
  * its area would be handled as clicks on the code underneath.
  */
 const provisionalZoneHeight = 120;
@@ -494,7 +494,7 @@ function createZone(editor: EditorHandle, anchor: DiffZoneAnchor): MountedZone {
 
 /**
  * Moves a zone to a new line or to the other side of the diff while keeping the
- * same DOM nodes, so the portal — and the React state inside it — survives.
+ * same DOM nodes, so the portal, and the React state inside it, survives.
  */
 function relocateZone(
   editor: EditorHandle,

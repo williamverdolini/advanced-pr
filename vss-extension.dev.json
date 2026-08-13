@@ -5,6 +5,7 @@
   "version": "0.1.4",
   "name": "Advanced PR Review (Development)",
   "description": "Development build of Advanced PR Review.",
+  "icons": { "default": "images/icon.png" },
   "categories": ["Azure Repos"],
   "baseUri": "https://localhost:3000",
   "targets": [{ "id": "Microsoft.VisualStudio.Services" }],
@@ -22,5 +23,5 @@
     }
   ],
   "content": { "details": { "path": "overview.md" } },
-  "files": [{ "path": "overview.md" }]
+  "files": [{ "path": "images/icon.png", "addressable": true }]
 }

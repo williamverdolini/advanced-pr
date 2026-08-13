@@ -44,8 +44,8 @@ export interface InlineZoneInput {
   collapsedThreadIds?: ReadonlySet<number>;
   /**
    * Sides the viewer actually renders. A thread anchored to a side that is not
-   * on screen — the base version in a unified diff, or either side of a file
-   * shown as plain content — has no line to sit under and falls back to the
+   * on screen (the base version in a unified diff, or either side of a file
+   * shown as plain content) has no line to sit under and falls back to the
    * zone above the file. Defaults to the changed side only.
    */
   visibleSides?: readonly DiffSide[];
@@ -60,7 +60,7 @@ export const defaultMaxThreadZones = 60;
 
 /**
  * Describes every inline region a file needs, keyed so that a thread keeps its
- * view zone — and the React state inside it — across refreshes.
+ * view zone, and the React state inside it, across refreshes.
  */
 export function buildInlineZones({
   filePath,
