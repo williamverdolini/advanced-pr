@@ -127,7 +127,9 @@ body,
   content: "";
 }
 
-.step-wizard button {
+/* Scoped to a class rather than the element: the step shares its `li` with the
+   decisions button, which brings its own styling from the library. */
+.step-wizard .step-button {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -142,7 +144,7 @@ body,
   cursor: pointer;
 }
 
-.step-wizard li.active button {
+.step-wizard li.active .step-button {
   border-bottom-color: var(--communication-background, #0078d4);
   color: var(--text-primary-color, rgba(0, 0, 0, 0.9));
   font-weight: 600;
@@ -169,10 +171,16 @@ body,
   background: var(--component-status-success, rgba(85, 163, 98, 1));
 }
 
+/* Same token as the `Request changes` icon in the step menu: one decision, one
+   colour, wherever it appears. */
 .step-index.changes-requested {
-  border-color: #a4262c;
-  color: #fff;
-  background: #a4262c;
+  border-color: var(--status-warning-foreground, rgba(250, 157, 45, 1));
+  /* Dark ink rather than the white the approved step uses, and deliberately not
+     a theme-following token: this amber is a status colour and stays the same in
+     both themes, where white on it measures 2.1:1 against the 4.5:1 an 11px
+     numeral needs. Dark reads at 9.9:1 either way. */
+  color: rgba(0, 0, 0, 0.9);
+  background: var(--status-warning-foreground, rgba(250, 157, 45, 1));
 }
 
 .step-label {
@@ -184,6 +192,81 @@ body,
 
 .step-count {
   flex: 0 0 auto;
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  font-size: 0.6875rem;
+}
+
+.step-decisions {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+/* Trimmed to the strip: the library button is sized for a toolbar, and the
+   wizard scrolls horizontally when the steps do not fit. */
+.step-decisions-button {
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0 2px;
+}
+
+.step-decisions-panel {
+  min-width: 220px;
+  max-width: 340px;
+  padding: 10px 12px 12px;
+}
+
+.step-decisions-title {
+  margin: 0 0 8px;
+  overflow: hidden;
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.step-decisions-panel ul {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step-decisions-panel li {
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The same two colours as the step number and the step menu icons. */
+.step-decisions-state {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.step-decisions-state.approved {
+  background: var(--component-status-success, rgba(85, 163, 98, 1));
+}
+
+.step-decisions-state.changes-requested {
+  background: var(--status-warning-foreground, rgba(250, 157, 45, 1));
+}
+
+.step-decisions-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.step-decisions-name em {
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  font-style: normal;
+}
+
+.step-decisions-date {
   color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
   font-size: 0.6875rem;
 }
@@ -201,7 +284,7 @@ body,
 }
 
 .feedback-icon-waiting {
-  color: #ca5010;
+  color: var(--status-warning-foreground, rgba(250, 157, 45, 1));
 }
 
 .feedback-icon-neutral {

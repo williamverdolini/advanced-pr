@@ -8,6 +8,7 @@ import {
   collectFolderPaths,
   type FileTreeNode,
 } from "../core/fileTree";
+import { toggleMember } from "../core/toggleSet";
 import type { ChangedFile, ReviewThread } from "../platform/azureDevOpsClient";
 import { MentionContext } from "./mentionContext";
 
@@ -38,13 +39,7 @@ export function FileTree({
   );
 
   const toggleFolder = (path: string): void => {
-    const next = new Set(expandedFolders);
-    if (next.has(path)) {
-      next.delete(path);
-    } else {
-      next.add(path);
-    }
-    setExpandedFolders(next);
+    setExpandedFolders((current) => toggleMember(current, path));
   };
 
   return (

@@ -10,6 +10,7 @@ import {
   type IdentityRefWithVote,
 } from "azure-devops-extension-api/Git";
 import { classifyFileChange, type FileChangeKind } from "../core/changeType";
+import { languageForPath } from "../core/language";
 import {
   formatLedgerEvent,
   parseLedgerEvent,
@@ -23,6 +24,18 @@ import {
   type StepPlan,
 } from "../core/reviewPlan";
 import type { PullRequestContext } from "./extensionContext";
+
+/**
+ * One client for the whole session: `getClient` constructs a new instance on
+ * every call, and every function here wants the same one, the way
+ * `identityService` holds on to the host service it resolves.
+ */
+let cachedClient: GitRestClient | undefined;
+
+function gitClient(): GitRestClient {
+  cachedClient ??= getClient(GitRestClient);
+  return cachedClient;
+}
 
 export interface PullRequestReviewer {
   id: string;
@@ -128,7 +141,7 @@ export async function loadPullRequestWorkspace(
     throw new Error("Azure DevOps did not provide a pull request ID.");
   }
 
-  const client = getClient(GitRestClient);
+  const client = gitClient();
   const pullRequest = context.repositoryId
     ? await client.getPullRequest(
         context.repositoryId,
@@ -196,19 +209,15 @@ export async function loadPullRequestWorkspace(
 export async function refreshThreads(
   workspace: PullRequestWorkspace,
 ): Promise<PullRequestWorkspace> {
-  const client = getClient(GitRestClient);
-  const threads = await client.getThreads(
-    workspace.repositoryId,
-    workspace.id,
-    workspace.projectId,
-  );
+  const { repositoryId, id: pullRequestId, projectId } = workspace;
+  const threads = await gitClient().getThreads(repositoryId, pullRequestId, projectId);
 
   return {
     ...workspace,
     ...projectThreads(
       threads,
       workspace.authorId,
-      workspace.id,
+      pullRequestId,
       workspace.files.map((file) => file.path),
     ),
   };
@@ -272,7 +281,7 @@ export async function loadChangedFileDiff(
   source: BlobSource,
   file: ChangedFile,
 ): Promise<FileDiffContent> {
-  const client = getClient(GitRestClient);
+  const client = gitClient();
   const [original, modified] = await Promise.all([
     getTextBlob(client, source.repositoryId, file.originalObjectId, source.projectId),
     getTextBlob(client, source.repositoryId, file.objectId, source.projectId),
@@ -290,7 +299,8 @@ export async function appendLedgerEvent(
   label: string,
   event: LedgerEventPayload,
 ): Promise<void> {
-  const client = getClient(GitRestClient);
+  const client = gitClient();
+  const { repositoryId, id: pullRequestId, projectId } = workspace;
   const content = formatLedgerEvent(label, event);
   const comment = {
     content,
@@ -302,10 +312,10 @@ export async function appendLedgerEvent(
     if (workspace.ledgerThreadId) {
       await client.createComment(
         comment,
-        workspace.repositoryId,
-        workspace.id,
+        repositoryId,
+        pullRequestId,
         workspace.ledgerThreadId,
-        workspace.projectId,
+        projectId,
       );
     } else {
       // First event on a pull request with no plan: the ledger thread is opened
@@ -315,17 +325,13 @@ export async function appendLedgerEvent(
           status: CommentThreadStatus.Active,
           comments: [comment],
         } as GitPullRequestCommentThread,
-        workspace.repositoryId,
-        workspace.id,
-        workspace.projectId,
+        repositoryId,
+        pullRequestId,
+        projectId,
       );
     }
   } catch (error) {
-    const threads = await client.getThreads(
-      workspace.repositoryId,
-      workspace.id,
-      workspace.projectId,
-    );
+    const threads = await client.getThreads(repositoryId, pullRequestId, projectId);
     const eventWasWritten = threads
       .flatMap((thread) => thread.comments)
       .some((existingComment) => existingComment.content.includes(event.eventId));
@@ -340,8 +346,7 @@ export async function setReviewerVote(
   reviewerId: string,
   vote: -10 | -5 | 0 | 10,
 ): Promise<void> {
-  const client = getClient(GitRestClient);
-  await client.createPullRequestReviewer(
+  await gitClient().createPullRequestReviewer(
     { id: reviewerId, vote } as IdentityRefWithVote,
     workspace.repositoryId,
     workspace.id,
@@ -356,7 +361,6 @@ export async function createAnchoredThread(
   position: ReviewThreadPosition,
   content: string,
 ): Promise<void> {
-  const client = getClient(GitRestClient);
   const start = { line: position.startLine, offset: position.startOffset };
   const end = { line: position.endLine, offset: position.endOffset };
   const threadContext = {
@@ -366,6 +370,15 @@ export async function createAnchoredThread(
     rightFileStart: position.side === "right" ? start : undefined,
     rightFileEnd: position.side === "right" ? end : undefined,
   };
+  // The comparison this anchor was taken from, and it has to be the one actually
+  // on screen: `getAllChanges` asks for the iteration against the base
+  // (`compareTo: 0`), which Azure DevOps expresses as the same iteration at both
+  // ends. Naming iteration 1 on the left would claim a `1 → N` comparison
+  // instead, and the native Files tab, which reprojects the anchor into the
+  // comparison the reader is looking at, would move a base-side comment onto the
+  // source side. `changeTrackingId` comes from the same base-to-iteration change
+  // list, so it only means anything alongside this.
+  const iteration = Math.max(1, workspace.iterationId);
   const thread = {
     status: CommentThreadStatus.Active,
     comments: [{ content, commentType: CommentType.Text, parentCommentId: 0 }],
@@ -373,13 +386,18 @@ export async function createAnchoredThread(
     pullRequestThreadContext: {
       changeTrackingId: file.changeTrackingId,
       iterationContext: {
-        firstComparingIteration: 1,
-        secondComparingIteration: Math.max(1, workspace.iterationId),
+        firstComparingIteration: iteration,
+        secondComparingIteration: iteration,
       },
     },
   } as GitPullRequestCommentThread;
 
-  await client.createThread(thread, workspace.repositoryId, workspace.id, workspace.projectId);
+  await gitClient().createThread(
+    thread,
+    workspace.repositoryId,
+    workspace.id,
+    workspace.projectId,
+  );
 }
 
 export async function createReviewPlan(
@@ -388,7 +406,6 @@ export async function createReviewPlan(
   version: number,
   markdown: string,
 ): Promise<void> {
-  const client = getClient(GitRestClient);
   const marker = `<!-- advanced-pr:v2 ${JSON.stringify({ kind: "review-plan", planId, version })} -->`;
   const content = `${markdown.trim()}\n\n${marker}`;
   const thread = {
@@ -396,7 +413,12 @@ export async function createReviewPlan(
     comments: [{ content, commentType: CommentType.Text, parentCommentId: 0 }],
   } as GitPullRequestCommentThread;
 
-  await client.createThread(thread, workspace.repositoryId, workspace.id, workspace.projectId);
+  await gitClient().createThread(
+    thread,
+    workspace.repositoryId,
+    workspace.id,
+    workspace.projectId,
+  );
 }
 
 export async function replyToThread(
@@ -404,8 +426,7 @@ export async function replyToThread(
   threadId: number,
   content: string,
 ): Promise<void> {
-  const client = getClient(GitRestClient);
-  await client.createComment(
+  await gitClient().createComment(
     { content, commentType: CommentType.Text, parentCommentId: 0 } as Comment,
     workspace.repositoryId,
     workspace.id,
@@ -424,8 +445,7 @@ export async function updateCommentContent(
   commentId: number,
   content: string,
 ): Promise<void> {
-  const client = getClient(GitRestClient);
-  await client.updateComment(
+  await gitClient().updateComment(
     { content } as Comment,
     workspace.repositoryId,
     workspace.id,
@@ -440,8 +460,7 @@ export async function setThreadResolved(
   threadId: number,
   resolved: boolean,
 ): Promise<void> {
-  const client = getClient(GitRestClient);
-  await client.updateThread(
+  await gitClient().updateThread(
     { status: resolved ? CommentThreadStatus.Fixed : CommentThreadStatus.Active } as GitPullRequestCommentThread,
     workspace.repositoryId,
     workspace.id,
@@ -456,23 +475,12 @@ export async function setCommentLiked(
   commentId: number,
   liked: boolean,
 ): Promise<void> {
-  const client = getClient(GitRestClient);
+  const client = gitClient();
+  const { repositoryId, id: pullRequestId, projectId } = workspace;
   if (liked) {
-    await client.createLike(
-      workspace.repositoryId,
-      workspace.id,
-      threadId,
-      commentId,
-      workspace.projectId,
-    );
+    await client.createLike(repositoryId, pullRequestId, threadId, commentId, projectId);
   } else {
-    await client.deleteLike(
-      workspace.repositoryId,
-      workspace.id,
-      threadId,
-      commentId,
-      workspace.projectId,
-    );
+    await client.deleteLike(repositoryId, pullRequestId, threadId, commentId, projectId);
   }
 }
 
@@ -630,26 +638,3 @@ async function getTextBlob(
     throw new Error("This file is not valid UTF-8 text.");
   }
 }
-
-function languageForPath(path: string): string {
-  const extension = path.split(".").pop()?.toLocaleLowerCase();
-  const languages: Record<string, string> = {
-    cs: "csharp",
-    css: "css",
-    html: "html",
-    java: "java",
-    js: "javascript",
-    json: "json",
-    jsx: "javascript",
-    md: "markdown",
-    py: "python",
-    sql: "sql",
-    ts: "typescript",
-    tsx: "typescript",
-    xml: "xml",
-    yaml: "yaml",
-    yml: "yaml",
-  };
-  return (extension && languages[extension]) || "plaintext";
-}
-

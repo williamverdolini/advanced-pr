@@ -21,8 +21,22 @@ export interface ReviewEvent {
 
 export type StepReviewStatus = "approved" | "changes-requested";
 
+export interface StepDecision {
+  reviewerId: string;
+  status: StepReviewStatus;
+  /** When the decision that still stands was recorded. */
+  publishedDate: string;
+}
+
 export interface ReducedReviewState {
+  /** Keyed reviewer, then step: what that one reviewer has decided. */
   stepStates: ReadonlyMap<string, ReadonlyMap<string, StepReviewStatus>>;
+  /**
+   * The same decisions read the other way round, keyed step then reviewer, and
+   * keeping the date. It answers "who has signed off on this step", which the
+   * per-reviewer view cannot without a scan.
+   */
+  stepDecisions: ReadonlyMap<string, ReadonlyMap<string, StepDecision>>;
   pullRequestDecisions: ReadonlyMap<string, "approved" | "rejected">;
   acceptedEventIds: ReadonlySet<string>;
 }
@@ -112,6 +126,9 @@ export function reduceReviewEvents(
     return dateOrder || left.commentId - right.commentId;
   });
   const mutableStepStates = new Map<string, Map<string, StepReviewStatus>>();
+  // Built in the same pass, so the ordering and the meaning of a reset have one
+  // implementation rather than two that can drift.
+  const mutableStepDecisions = new Map<string, Map<string, StepDecision>>();
   const pullRequestDecisions = new Map<string, "approved" | "rejected">();
 
   for (const event of orderedEvents) {
@@ -133,18 +150,29 @@ export function reduceReviewEvents(
       mutableStepStates.set(event.reviewerId, reviewerStates);
     }
 
+    let stepReviewers = mutableStepDecisions.get(event.stepId);
+    if (!stepReviewers) {
+      stepReviewers = new Map<string, StepDecision>();
+      mutableStepDecisions.set(event.stepId, stepReviewers);
+    }
+
     if (event.kind === "step-reset") {
       reviewerStates.delete(event.stepId);
+      stepReviewers.delete(event.reviewerId);
     } else {
-      reviewerStates.set(
-        event.stepId,
-        event.kind === "step-approved" ? "approved" : "changes-requested",
-      );
+      const status = event.kind === "step-approved" ? "approved" : "changes-requested";
+      reviewerStates.set(event.stepId, status);
+      stepReviewers.set(event.reviewerId, {
+        reviewerId: event.reviewerId,
+        status,
+        publishedDate: event.publishedDate,
+      });
     }
   }
 
   return {
     stepStates: mutableStepStates,
+    stepDecisions: mutableStepDecisions,
     pullRequestDecisions,
     acceptedEventIds: new Set(uniqueEvents.keys()),
   };

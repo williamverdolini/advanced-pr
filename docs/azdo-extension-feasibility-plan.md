@@ -441,6 +441,14 @@ Punti da verificare con un round-trip reale contro la UI nativa di Azure DevOps:
 - Va tracciato il **lato del diff**: i commenti sulla versione base usano `leftFileStart/End`, non `rightFileStart/End`.
 - Su una PR con **più iterazioni**, l'ancoraggio va verificato anche a distanza di un push.
 
+⚠️ **`iterationContext` deve descrivere il confronto che è davvero a schermo.** Round-trip fatto: un commento scritto sul lato base da questa estensione compariva **a destra** nella tab Files nativa. `threadContext.leftFileStart` era corretto e Azure DevOps non lo riscrive — il difetto era in `iterationContext`, popolato con `{firstComparingIteration: 1, secondComparingIteration: N}`, che dichiara un confronto *iterazione 1 → iterazione N*. Il diff che mostriamo è invece *base → iterazione N* (`getPullRequestIterationChanges` con `compareTo: 0`), quindi stavamo etichettando coordinate della base come coordinate dell'iterazione 1. La tab Files riproietta l'ancoraggio nel confronto che il lettore sta guardando: il contenuto dell'iterazione 1, in un confronto `base → N`, sta sul lato sorgente, cioè a destra.
+
+La forma corretta per "iterazione N contro la sua base" è la **stessa iterazione ai due estremi**, `{firstComparingIteration: N, secondComparingIteration: N}`. Vale anche per `changeTrackingId`, che viene dalla stessa lista di change `base → N` e ha significato solo in quel confronto.
+
+Due conseguenze da tenere a mente: con una PR a **una sola iterazione** il difetto non si manifestava (`N = 1` produceva `{1, 1}`, per caso la forma giusta), quindi serve una PR con almeno due iterazioni per verificarlo; e lo stesso campo è quello che, se mal popolato, fa apparire il commento come *outdated* nella UI nativa (§6.3) — da ricontrollare insieme.
+
+Nota su come leggiamo: `mapReviewThread` **ignora** `pullRequestThreadContext` e deriva il lato dal solo `threadContext`. È il motivo per cui l'incoerenza era asimmetrica — la direzione Files → Guided Review funzionava — ed è anche il motivo per cui un thread che porta *entrambi* gli ancoraggi viene mostrato a destra: resta da decidere se sia il comportamento voluto.
+
 ### 7.4 Presentazione dei thread: inline dentro l'editor
 
 **Il pannello laterale è stato rimosso.** L'area del file è l'unico posto dove si leggono e si gestiscono i commenti, come nella sezione Files nativa:

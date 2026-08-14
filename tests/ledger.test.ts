@@ -175,6 +175,66 @@ describe("review ledger", () => {
     });
   });
 
+  describe("who decided on a step", () => {
+    it("lists every reviewer with the decision that still stands", () => {
+      const state = reduceReviewEvents(
+        [
+          event({ kind: "step-changes-requested" }),
+          event({
+            eventId: "event-2",
+            publishedDate: "2026-08-13T11:00:00Z",
+            commentId: 2,
+          }),
+          event({
+            eventId: "event-3",
+            reviewerId: "reviewer-2",
+            kind: "step-changes-requested",
+            publishedDate: "2026-08-13T12:00:00Z",
+            commentId: 3,
+          }),
+        ],
+        currentPlan,
+      );
+
+      expect([...(state.stepDecisions.get("step-1")?.values() ?? [])]).toEqual([
+        {
+          reviewerId: "reviewer-1",
+          status: "approved",
+          publishedDate: "2026-08-13T11:00:00Z",
+        },
+        {
+          reviewerId: "reviewer-2",
+          status: "changes-requested",
+          publishedDate: "2026-08-13T12:00:00Z",
+        },
+      ]);
+    });
+
+    it("drops a reviewer who reset their decision, and keeps the others", () => {
+      const state = reduceReviewEvents(
+        [
+          event({}),
+          event({ eventId: "event-2", reviewerId: "reviewer-2", commentId: 2 }),
+          event({
+            eventId: "event-3",
+            kind: "step-reset",
+            publishedDate: "2026-08-13T13:00:00Z",
+            commentId: 3,
+          }),
+        ],
+        currentPlan,
+      );
+
+      expect([...(state.stepDecisions.get("step-1")?.keys() ?? [])]).toEqual(["reviewer-2"]);
+    });
+
+    it("holds nothing for a step nobody has decided on", () => {
+      const state = reduceReviewEvents([event({ stepId: "step-1" })], currentPlan);
+
+      expect(state.stepDecisions.get("step-2")).toBeUndefined();
+    });
+  });
+
   it("invalidates a step event when its current fingerprint changed", () => {
     const state = reduceReviewEvents(
       [event({ stepFingerprint: "old-fingerprint" })],
