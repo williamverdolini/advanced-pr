@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { parseInline, parseMarkdown, safeLinkHref } from "../src/core/markdown";
+import {
+  findMentionIds,
+  parseInline,
+  parseMarkdown,
+  safeLinkHref,
+} from "../src/core/markdown";
 
 describe("comment markdown", () => {
   it("parses the inline syntax the editor toolbar produces", () => {
@@ -38,6 +43,43 @@ describe("comment markdown", () => {
     ).toBe("[x](javascript:alert(1))");
     expect(safeLinkHref("JavaScript:alert(1)")).toBeUndefined();
     expect(safeLinkHref("mailto:a@b.c")).toBe("mailto:a@b.c");
+  });
+
+  // Real payload: "@<8BD95966-6F7D-4654-9097-300BFB3D7EE7> un commento", where
+  // the id matches the comment author's `id` in lower case.
+  describe("mentions", () => {
+    const id = "8bd95966-6f7d-4654-9097-300bfb3d7ee7";
+
+    it("parses the token and normalises the id to lower case", () => {
+      expect(parseInline(`@<${id.toUpperCase()}> ciao`)).toEqual([
+        { kind: "mention", id },
+        { kind: "text", value: " ciao" },
+      ]);
+    });
+
+    it("keeps surrounding text and other inline syntax intact", () => {
+      expect(parseInline(`ok @<${id}> **grazie**`)).toEqual([
+        { kind: "text", value: "ok " },
+        { kind: "mention", id },
+        { kind: "text", value: " " },
+        { kind: "strong", children: [{ kind: "text", value: "grazie" }] },
+      ]);
+    });
+
+    it("leaves a mention inside a code span literal", () => {
+      expect(parseInline(`\`@<${id}>\``)).toEqual([{ kind: "code", value: `@<${id}>` }]);
+    });
+
+    it("ignores anything that is not a well formed id", () => {
+      expect(parseInline("@<not-a-guid> and @someone")).toEqual([
+        { kind: "text", value: "@<not-a-guid> and @someone" },
+      ]);
+    });
+
+    it("collects the ids a comment mentions", () => {
+      expect(findMentionIds(`@<${id.toUpperCase()}> and @<${id}> and @<nope>`)).toEqual([id, id]);
+      expect(findMentionIds("no mentions here")).toEqual([]);
+    });
   });
 
   it("parses block structure", () => {

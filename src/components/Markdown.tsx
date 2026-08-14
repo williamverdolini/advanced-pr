@@ -4,6 +4,7 @@ import {
   type MarkdownBlock,
   type MarkdownInline,
 } from "../core/markdown";
+import { MentionContext } from "./mentionContext";
 
 export interface MarkdownProps {
   content: string;
@@ -90,10 +91,24 @@ function Lines({ lines }: { lines: MarkdownInline[][] }): React.ReactElement {
 }
 
 function Inline({ nodes }: { nodes: MarkdownInline[] }): React.ReactElement {
+  const resolveMention = React.useContext(MentionContext);
+
   return (
     <>
       {nodes.map((node, index) => {
         switch (node.kind) {
+          case "mention": {
+            const identity = resolveMention?.(node.id);
+            return (
+              <span
+                key={index}
+                className={identity ? "mention" : "mention unresolved"}
+                title={identity?.uniqueName ?? identity?.displayName ?? node.id}
+              >
+                @{identity?.displayName ?? "unknown"}
+              </span>
+            );
+          }
           case "strong":
             return (
               <strong key={index}>

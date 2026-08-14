@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildStepPlan, parsePlanMarker } from "../src/core/reviewPlan";
+import {
+  buildStepPlan,
+  findStepForFile,
+  parsePlanMarker,
+} from "../src/core/reviewPlan";
 
 describe("review plan", () => {
   it("reads a v2 marker", () => {
@@ -78,6 +82,20 @@ describe("review plan", () => {
       expect(editedNotes.steps[0].fingerprint).toBe(withoutNotes.steps[0].fingerprint);
       expect(editedNotes.steps[0].stepId).toBe(withoutNotes.steps[0].stepId);
     });
+  });
+
+  it("finds the step a file belongs to, including the catch-all", () => {
+    const plan = buildStepPlan(
+      "1. Core\n- src/core.ts",
+      ["src/core.ts", "README.md"],
+      { planId: "plan-1", version: 1 },
+    );
+
+    expect(findStepForFile(plan.steps, "src/core.ts")?.title).toBe("Core");
+    expect(findStepForFile(plan.steps, "README.md")?.title).toBe("Everything else");
+    // The host writes the path with a leading slash, as `/src/core.ts`.
+    expect(findStepForFile(plan.steps, "/src/core.ts")?.title).toBe("Core");
+    expect(findStepForFile(plan.steps, "src/missing.ts")).toBeUndefined();
   });
 
   it("assigns listed files and creates the catch-all step", () => {

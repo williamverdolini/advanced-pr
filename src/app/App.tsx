@@ -17,9 +17,12 @@ import {
 import { DiffViewer, type DiffSelection } from "../components/DiffViewer";
 import { FileTree } from "../components/FileTree";
 import { Markdown } from "../components/Markdown";
+import { MentionContext, type MentionIdentity } from "../components/mentionContext";
 import { MarkdownCommentEditor } from "../components/MarkdownCommentEditor";
 import { contentSideForChange, isContentOnlyChange } from "../core/changeType";
 import { buildInlineZones, type InlineZoneDescriptor } from "../core/inlineZones";
+import { findMentionIds } from "../core/markdown";
+import { findStepForFile, normalizeRepositoryPath } from "../core/reviewPlan";
 import { indexThreadsByFile } from "../core/threadIndex";
 import {
   canApprovePullRequest,
@@ -44,7 +47,9 @@ import {
   type ReviewThread,
 } from "../platform/azureDevOpsClient";
 import type { ExtensionSession, PullRequestContext } from "../platform/extensionContext";
+import { getHostQueryParams, setHostQueryParams } from "../platform/hostNavigation";
 import { observeHostTheme } from "../platform/hostTheme";
+import { getKnownIdentity, resolveIdentities } from "../platform/identityService";
 import { loadViewedFiles, saveViewedFiles } from "../platform/viewedFilesStore";
 import "./app.css";
 
@@ -185,6 +190,64 @@ function Workspace({ workspace, reviewerId, onRefresh }: WorkspaceProps): React.
   const selectionRef = React.useRef<DiffSelection>();
   const [hasSelection, setHasSelection] = React.useState(false);
 
+  // People already on the pull request resolve for free; anyone else has to be
+  // looked up, because a thread comes back with `identities: null` even when it
+  // carries a mention.
+  const [directoryExtras, setDirectoryExtras] = React.useState<
+    ReadonlyMap<string, MentionIdentity>
+  >(new Map());
+
+  const knownIdentities = React.useMemo(() => {
+    const directory = new Map<string, MentionIdentity>();
+    directory.set(workspace.authorId.toLowerCase(), { displayName: workspace.authorName });
+    for (const reviewer of workspace.reviewers) {
+      directory.set(reviewer.id.toLowerCase(), { displayName: reviewer.displayName });
+    }
+    for (const thread of workspace.threads) {
+      for (const comment of thread.comments) {
+        directory.set(comment.authorId.toLowerCase(), { displayName: comment.authorName });
+      }
+    }
+    return directory;
+  }, [workspace.authorId, workspace.authorName, workspace.reviewers, workspace.threads]);
+
+  const resolveMention = React.useCallback(
+    (id: string): MentionIdentity | undefined =>
+      knownIdentities.get(id.toLowerCase()) ??
+      directoryExtras.get(id.toLowerCase()) ??
+      // Anyone the picker has already returned, which covers the mention being
+      // typed right now: it belongs to no saved comment yet, so the lookup
+      // effect below would never see it.
+      getKnownIdentity(id),
+    [directoryExtras, knownIdentities],
+  );
+
+  React.useEffect(() => {
+    const mentioned = new Set(
+      workspace.threads.flatMap((thread) =>
+        thread.comments.flatMap((comment) => findMentionIds(comment.content)),
+      ),
+    );
+    const missing = [...mentioned].filter(
+      (id) => !knownIdentities.has(id) && !directoryExtras.has(id),
+    );
+    if (missing.length === 0) {
+      return;
+    }
+
+    let active = true;
+    void resolveIdentities(missing).then((found) => {
+      if (!active || found.size === 0) {
+        return;
+      }
+      setDirectoryExtras((current) => new Map([...current, ...found]));
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [directoryExtras, knownIdentities, workspace.threads]);
+
   const reviewState = reduceReviewEvents(workspace.ledgerEvents, {
     planId: workspace.plan.planId,
     planVersion: workspace.plan.version,
@@ -302,6 +365,50 @@ function Workspace({ workspace, reviewerId, onRefresh }: WorkspaceProps): React.
     [selectedThreadId, visibleSides],
   );
   const visibleViewedCount = visibleFiles.filter((file) => viewedFiles.has(file.path)).length;
+
+  // The native Files tab carries the open file in a `path` query parameter.
+  // Reusing the same one means a refresh comes back to the same file, and
+  // switching between that tab and this one keeps the place.
+  const restoredFromUrlRef = React.useRef(false);
+  React.useEffect(() => {
+    if (restoredFromUrlRef.current || workspace.files.length === 0) {
+      return;
+    }
+
+    restoredFromUrlRef.current = true;
+    let active = true;
+    void getHostQueryParams().then((params) => {
+      const wanted = normalizeRepositoryPath(params.path ?? "").toLocaleLowerCase();
+      if (!active || !wanted) {
+        return;
+      }
+
+      const file = workspace.files.find(
+        (candidate) => candidate.path.toLocaleLowerCase() === wanted,
+      );
+      if (!file) {
+        return;
+      }
+
+      // The step comes with the file: landing on a file outside the current
+      // step would show it against a file list it does not belong to.
+      const step = findStepForFile(workspace.plan.steps, file.path);
+      if (step) {
+        setSelectedStepId(step.stepId);
+      }
+      setSelectedFile(file);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [workspace.files, workspace.plan.steps]);
+
+  React.useEffect(() => {
+    if (selectedFile) {
+      void setHostQueryParams({ path: `/${selectedFile.path}` });
+    }
+  }, [selectedFile]);
 
   React.useEffect(() => {
     if (!selectedFile) {
@@ -666,6 +773,7 @@ function Workspace({ workspace, reviewerId, onRefresh }: WorkspaceProps): React.
   };
 
   return (
+    <MentionContext.Provider value={resolveMention}>
     <section className="workspace-shell">
       {/* Title, branches and counters live in the Azure DevOps header that
           embeds this iframe: repeating them here would only cost height. */}
@@ -942,6 +1050,7 @@ function Workspace({ workspace, reviewerId, onRefresh }: WorkspaceProps): React.
         </MessageCard>
       )}
     </section>
+    </MentionContext.Provider>
   );
 }
 

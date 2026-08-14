@@ -1,7 +1,15 @@
 import * as React from "react";
 import { Button } from "azure-devops-ui/Button";
 import { TextField } from "azure-devops-ui/TextField";
+import {
+  mergeMentionDirectory,
+  toDisplayText,
+  toStoredText,
+} from "../core/mentionText";
+import type { DirectoryIdentity } from "../platform/identityService";
 import { Markdown } from "./Markdown";
+import { MentionContext } from "./mentionContext";
+import { MentionTypeahead } from "./MentionTypeahead";
 
 export interface MarkdownCommentEditorProps {
   value: string;
@@ -14,19 +22,27 @@ export interface MarkdownCommentEditorProps {
 }
 
 interface MarkdownAction {
+  id: string;
+  iconName: string;
   label: string;
   prefix: string;
   suffix?: string;
-  placeholder: string;
+  /**
+   * Text to leave selected when nothing was selected. Without it the action
+   * only inserts its prefix and leaves the caret after it, which is what the
+   * mention needs: the typeahead has to open on an empty query.
+   */
+  placeholder?: string;
 }
 
 const actions: MarkdownAction[] = [
-  { label: "B", prefix: "**", suffix: "**", placeholder: "bold text" },
-  { label: "I", prefix: "_", suffix: "_", placeholder: "italic text" },
-  { label: "Code", prefix: "`", suffix: "`", placeholder: "code" },
-  { label: "Link", prefix: "[", suffix: "](https://)", placeholder: "link text" },
-  { label: "Quote", prefix: "> ", placeholder: "quoted text" },
-  { label: "List", prefix: "- ", placeholder: "list item" },
+  { id: "bold", iconName: "SemiboldWeight", label: "Bold", prefix: "**", suffix: "**", placeholder: "bold text" },
+  { id: "italic", iconName: "Italic", label: "Italic", prefix: "_", suffix: "_", placeholder: "italic text" },
+  { id: "code", iconName: "Embed", label: "Code", prefix: "`", suffix: "`", placeholder: "code" },
+  { id: "link", iconName: "Link", label: "Link", prefix: "[", suffix: "](https://)", placeholder: "link text" },
+  { id: "bulleted", iconName: "BulletedList", label: "Bulleted list", prefix: "- ", placeholder: "list item" },
+  { id: "numbered", iconName: "NumberedList", label: "Numbered list", prefix: "1. ", placeholder: "list item" },
+  { id: "mention", iconName: "Accounts", label: "Mention someone", prefix: "@" },
 ];
 
 export function MarkdownCommentEditor({
@@ -39,6 +55,27 @@ export function MarkdownCommentEditor({
   onCancel,
 }: MarkdownCommentEditorProps): React.ReactElement {
   const inputRef = React.useRef<HTMLTextAreaElement & HTMLInputElement>(null);
+  // Bumped when the toolbar inserts an "@": the caret is only moved on the next
+  // frame, so the typeahead needs telling to look again once it has landed.
+  const [caretRevision, setCaretRevision] = React.useState(0);
+  const resolveMention = React.useContext(MentionContext);
+  // Names chosen from the typeahead. A ref, because the mapping has to be in
+  // place by the time the very next change is converted back.
+  const insertedNamesRef = React.useRef(new Map<string, string>());
+
+  // The comment is stored as `@<GUID>` but written as `@Display Name`: the
+  // editor is the only place that knows both forms.
+  const display = React.useMemo(
+    () => toDisplayText(value, (id) => resolveMention?.(id)),
+    [resolveMention, value],
+  );
+
+  const toStored = (next: string): string =>
+    toStoredText(next, mergeMentionDirectory(display.names, insertedNamesRef.current));
+
+  const rememberMention = (identity: DirectoryIdentity): void => {
+    insertedNamesRef.current.set(identity.displayName.toLowerCase(), identity.id);
+  };
 
   const applyMarkdown = (action: MarkdownAction): void => {
     const input = inputRef.current;
@@ -46,15 +83,21 @@ export function MarkdownCommentEditor({
       return;
     }
 
-    const start = input.selectionStart ?? value.length;
+    const source = display.text;
+    const start = input.selectionStart ?? source.length;
     const end = input.selectionEnd ?? start;
-    const selected = value.slice(start, end) || action.placeholder;
+    const selected =
+      action.placeholder === undefined ? "" : source.slice(start, end) || action.placeholder;
     const replacement = `${action.prefix}${selected}${action.suffix ?? ""}`;
-    onChange(`${value.slice(0, start)}${replacement}${value.slice(end)}`);
+    onChange(toStored(`${source.slice(0, start)}${replacement}${source.slice(end)}`));
 
     window.requestAnimationFrame(() => {
       input.focus();
-      input.setSelectionRange(start + action.prefix.length, start + action.prefix.length + selected.length);
+      input.setSelectionRange(
+        start + action.prefix.length,
+        start + action.prefix.length + selected.length,
+      );
+      setCaretRevision((revision) => revision + 1);
     });
   };
 
@@ -63,11 +106,12 @@ export function MarkdownCommentEditor({
       <div className="markdown-toolbar" role="toolbar" aria-label="Comment formatting">
         {actions.map((action) => (
           <Button
-            key={action.label}
-            text={action.label}
+            key={action.id}
             subtle
+            iconProps={{ iconName: action.iconName }}
+            ariaLabel={action.label}
             disabled={disabled}
-            tooltipProps={{ text: `Insert ${action.placeholder}` }}
+            tooltipProps={{ text: action.label }}
             onClick={() => applyMarkdown(action)}
           />
         ))}
@@ -85,9 +129,17 @@ export function MarkdownCommentEditor({
         rows={3}
         spellCheck
         placeholder={placeholder}
-        value={value}
+        value={display.text}
         disabled={disabled}
-        onChange={(_event, nextValue) => onChange(nextValue)}
+        onChange={(_event, nextValue) => onChange(toStored(nextValue))}
+      />
+      <MentionTypeahead
+        inputRef={inputRef}
+        value={display.text}
+        caretRevision={caretRevision}
+        disabled={disabled}
+        onChange={(nextValue) => onChange(toStored(nextValue))}
+        onMentionInserted={rememberMention}
       />
       {value.trim() && (
         <section className="markdown-preview" aria-label="Comment preview">

@@ -804,6 +804,65 @@ body,
   color: var(--communication-foreground, #0078d4);
 }
 
+/* Rendered in a portal on document.body, because the view zone that holds the
+   editor clips its own content. Fixed positioning follows the field's rect. */
+.mention-suggestions {
+  position: fixed;
+  z-index: 1000;
+  /* Matches `listWidth` in MentionTypeahead, which keeps it inside the
+     viewport when the caret is near the right edge. */
+  width: 260px;
+  max-height: 240px;
+  margin: 2px 0 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  border: 1px solid rgba(var(--palette-neutral-20, 200, 200, 200), 1);
+  border-radius: 2px;
+  background: var(--background-color, #fff);
+  box-shadow: 0 3.2px 7.2px 0 var(--callout-shadow-color, rgb(0 0 0 / 13%));
+  list-style: none;
+}
+
+.mention-suggestions button {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 5px 12px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mention-suggestions button.active {
+  background: rgba(var(--palette-neutral-6, 239, 239, 239), 1);
+}
+
+.mention-unique {
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  font-size: 0.6875rem;
+}
+
+.mention {
+  padding: 0 3px;
+  border-radius: 2px;
+  color: var(--communication-foreground, #0078d4);
+  background: rgb(0 120 212 / 10%);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Not yet resolved to a name, or an account that no longer exists. Never shown
+   as the raw 36-character id it came from. */
+.mention.unresolved {
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  background: rgba(var(--palette-neutral-8, 234, 234, 234), 1);
+  font-weight: normal;
+}
+
 .markdown-preview {
   padding: 6px 8px;
   border: 1px dashed rgba(var(--palette-neutral-10, 218, 218, 218), 1);
@@ -849,7 +908,8 @@ body,
 .markdown-toolbar {
   display: flex;
   align-items: center;
-  gap: 2px;
+  flex-wrap: wrap;
+  gap: 1px;
 }
 
 .markdown-hint {

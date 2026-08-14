@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.2.0
+
+Mentions in comments.
+
+- Typing `@` in a comment opens a search over the whole organization, people and teams alike,
+  with keyboard navigation and most-recently-used suggestions on an empty query. Picking
+  someone also promotes them in the host's MRU, so the list learns from use.
+- The comment toolbar is now icon-only: bold, italic, code, link, bulleted and numbered
+  lists, and a button that starts a mention.
+- The open file is kept in the host page's `path` query parameter, the same one the native
+  Files tab uses. A refresh comes back to the same file and to the step that contains it, and
+  moving between the two tabs keeps the place.
+- `@<GUID>` mention tokens parsed and rendered as a chip carrying the person's name, instead
+  of the raw identity id Azure DevOps stores in the comment text. The file tree shows the
+  same names in its comment previews.
+- Names resolved from the people already on the pull request, from anyone the picker has
+  returned, and otherwise through the host's identity service, which searches the
+  organization **without the extension requesting an identity scope of its own**.
+- An identity that cannot be resolved renders as a neutral chip, never as a bare id.
+
+- The editor shows a mention as `@Display Name` while Azure DevOps keeps storing `@<GUID>`:
+  the two forms are converted on the way in and out. A name the editor cannot map back to an
+  identity stays plain text rather than becoming a mention by accident, and a token whose
+  identity cannot be resolved is left untouched rather than silently dropped.
+
 ## 0.1.0
 
 First private release of the **Guided Review** tab for Azure DevOps pull requests.

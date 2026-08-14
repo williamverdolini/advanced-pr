@@ -251,6 +251,21 @@ function createStep(
   };
 }
 
+/**
+ * The step a file belongs to. Assignment is exclusive: a path claimed by an
+ * earlier step never reaches a later one, and whatever is left is in the
+ * catch-all, so the first match is the only match.
+ */
+export function findStepForFile(
+  steps: readonly ReviewStep[],
+  path: string,
+): ReviewStep | undefined {
+  const wanted = normalizeRepositoryPath(path).toLocaleLowerCase();
+  return steps.find((step) =>
+    step.files.some((file) => file.toLocaleLowerCase() === wanted),
+  );
+}
+
 export function normalizeRepositoryPath(value: string): string {
   const markdownLink = value.match(/^\[.*?\]\((.*?)\)$/)?.[1] ?? value;
   return markdownLink

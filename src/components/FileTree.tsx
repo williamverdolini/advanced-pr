@@ -2,12 +2,14 @@ import * as React from "react";
 import { Button } from "azure-devops-ui/Button";
 import { Checkbox, TriStateCheckbox } from "azure-devops-ui/Checkbox";
 import { changeKindLabels, type FileChangeKind } from "../core/changeType";
+import { toPlainText } from "../core/markdown";
 import {
   buildFileTree,
   collectFolderPaths,
   type FileTreeNode,
 } from "../core/fileTree";
 import type { ChangedFile, ReviewThread } from "../platform/azureDevOpsClient";
+import { MentionContext } from "./mentionContext";
 
 export interface FileTreeProps {
   files: readonly ChangedFile[];
@@ -110,6 +112,8 @@ function TreeNodes({
   onSetViewed,
   onToggleFolder,
 }: TreeNodesProps): React.ReactElement {
+  const resolveMention = React.useContext(MentionContext);
+
   return (
     <>
       {nodes.map((node) => {
@@ -163,6 +167,11 @@ function TreeNodes({
                 <ul className="file-thread-list" role="group">
                   {fileThreads.map((thread) => {
                     const lastComment = thread.comments.at(-1);
+                    // A summary line, so mention tokens are reduced to names
+                    // rather than shown as raw identity ids.
+                    const preview = lastComment
+                      ? toPlainText(lastComment.content, resolveMention)
+                      : undefined;
                     return (
                       <li key={thread.id} role="treeitem" aria-level={level + 1}>
                         <button
@@ -172,7 +181,7 @@ function TreeNodes({
                               ? "file-thread-button selected"
                               : "file-thread-button"
                           }
-                          title={lastComment?.content ?? `Comment ${thread.id}`}
+                          title={preview ?? `Comment ${thread.id}`}
                           onClick={() => onSelectThread(node.file, thread)}
                         >
                           <span
@@ -183,7 +192,7 @@ function TreeNodes({
                             L{thread.position?.startLine ?? "?"}
                           </span>
                           <span className="file-thread-preview">
-                            {lastComment?.content ?? "Comment"}
+                            {preview || "Comment"}
                           </span>
                         </button>
                       </li>

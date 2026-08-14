@@ -72,7 +72,7 @@ The extension is published privately under the **NebulaImprover** publisher:
 
 The rehearsal exists because `baseUri` never exercises how the packaged bundle resolves its assets from the Marketplace CDN, and Azure DevOps allows no sideloading: publishing is the only way to find out. Doing it on the development extension ID spends a throwaway version number instead of a production one.
 
-Both development manifests share that one extension ID, and therefore one version line: after publishing the packaged variant as `0.1.5`, going back to hot reload means bumping `vss-extension.dev.json` to `0.1.6`, not republishing `0.1.4`.
+Both development manifests share that one extension ID, and therefore **one version line**. They take turns on it: after publishing the packaged variant, going back to hot reload means bumping `vss-extension.dev.json` above the version just published, not republishing the number it still carries. The Marketplace rejects a version equal to or lower than the published one, and that rejection is the usual reason a republish "does nothing".
 
 ## 1. Prerequisites
 
