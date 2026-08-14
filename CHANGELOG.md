@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.3.0
+
+Who decided on each step, and a correction to the side a comment lands on.
+
+- **Step decisions on demand**: a button on every decided step lists the reviewers, their
+  decision and its date, read from the ledger like the rest of the review state.
+- **Fixed**: a comment written on the base side appeared on the source side in the native Files
+  tab. The anchor was right, the iteration comparison sent with it was not. Affected pull
+  requests with more than one iteration; comments already stored keep their anchor.
+- **Fixed**: `Changes requested` was a red step number and an orange menu icon. Both now use the
+  host's warning colour, with dark text on the step number for legibility.
+- **Fixed**: the sign-off warning counted the plan and the recorded decisions as open
+  discussions, and once per plan version. Comments the extension writes are excluded; a real
+  reply to the plan still counts.
+- Marking files as viewed no longer writes when nothing changed.
+
+### Internals
+
+- `App.tsx` goes from 1409 lines to 109: one file per component, one hook per concern under
+  `src/app/`. Behaviour-preserving by design, and the unit tests cover `core/` only, so the
+  review flow needs a manual pass before promoting a build.
+- New tested `core/` modules for logic that was inlined or duplicated: set membership, Monaco
+  language by path, the comment marker. The event reducer also reports decisions per step.
+- One Git REST client per session instead of one per call.
+- `ARCHITECTURE.md` writes down the layer rule and where each kind of change belongs;
+  `CLAUDE.md` carries the same invariants for agents.
+
 ## 0.2.0
 
 Mentions in comments.

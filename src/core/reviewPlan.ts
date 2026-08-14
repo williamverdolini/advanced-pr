@@ -1,4 +1,5 @@
 import { stableHash } from "./hash";
+import { markerPattern } from "./marker";
 
 export interface ReviewPlanMarker {
   planId: string;
@@ -48,10 +49,8 @@ interface ParsedSection {
   explanation: string[];
 }
 
-const planMarkerPattern = /<!--\s*advanced-pr:v2\s+(\{.*?\})\s*-->/s;
-
 export function parsePlanMarker(content: string): ReviewPlanMarker | undefined {
-  const match = content.match(planMarkerPattern);
+  const match = content.match(markerPattern);
   if (!match) {
     return undefined;
   }

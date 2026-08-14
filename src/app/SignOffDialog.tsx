@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Dialog } from "azure-devops-ui/Dialog";
 import { MessageCard, MessageCardSeverity } from "azure-devops-ui/MessageCard";
+import { isGeneratedComment } from "../core/marker";
 import type { PullRequestWorkspace } from "../platform/azureDevOpsClient";
 
 export interface SignOffDialogProps {
@@ -26,9 +27,16 @@ export function SignOffDialog({
   onConfirm,
 }: SignOffDialogProps): React.ReactElement {
   const reviewedSteps = workspace.plan.steps.filter((step) => step.files.length > 0);
+  // Only discussions count, and the test is per comment rather than per thread:
+  // the plan and every recorded decision are comments this extension wrote, and
+  // the plan thread is also the ledger, so a thread-level rule would either
+  // count them all or hide a real reply to the plan.
   const myOpenThreads = workspace.threads.filter(
     (thread) =>
-      thread.isOpen && thread.comments.some((comment) => comment.authorId === reviewerId),
+      thread.isOpen &&
+      thread.comments.some(
+        (comment) => comment.authorId === reviewerId && !isGeneratedComment(comment.content),
+      ),
   );
 
   return (
