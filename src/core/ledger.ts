@@ -1,3 +1,5 @@
+import { markerPattern } from "./marker";
+
 export type ReviewEventKind =
   | "step-approved"
   | "step-changes-requested"
@@ -53,8 +55,6 @@ export type LedgerEventPayload = Omit<
   "reviewerId" | "publishedDate" | "commentId"
 >;
 
-const eventMarkerPattern = /<!--\s*advanced-pr:v2\s+(\{.*?\})\s*-->/s;
-
 export function formatLedgerEvent(label: string, event: LedgerEventPayload): string {
   return `${label}\n\n<!-- advanced-pr:v2 ${JSON.stringify(event)} -->`;
 }
@@ -65,7 +65,7 @@ export function parseLedgerEvent(
   publishedDate: string,
   commentId: number,
 ): ReviewEvent | undefined {
-  const match = content.match(eventMarkerPattern);
+  const match = content.match(markerPattern);
   if (!match) {
     return undefined;
   }
