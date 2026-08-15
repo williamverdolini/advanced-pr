@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.0
+
+Moving through a file, and reading it.
+
+- **Previous and next difference** in the file header, so a long file is walked by change
+  rather than by scrolling. Disabled, with a reason, on files that have nothing to compare.
+- Any line offers to be commented: hovering it shows a comment icon in the margin, replacing
+  the "Comment on selection" command. One button covers both cases, because a live selection
+  on the same side of the diff is what the comment anchors to, and the line clicked is used
+  only when there is nothing selected.
+- The file header shows the file name, with its folder underneath as a subtitle, instead of
+  one long path.
+- Entering a step lands on the first file **not yet marked as viewed**, in the order the tree
+  shows them. It used to be the first file in the order the API returned, which is not the
+  order on screen, so the selection appeared to fall in the middle of the list.
+- The Explain panel starts closed.
+- The file tree's scrollbar is thin and stays out of sight until the pointer is over it.
+
 ## 0.3.0
 
 Who decided on each step, and a correction to the side a comment lands on.

@@ -606,6 +606,28 @@ body,
   background: rgb(0 120 212 / 14%);
 }
 
+/* The command bar carries `flex-self-start`, which pins it to the first line of
+   the title. That reads well with a one-line title; ours has a subtitle under
+   it, so the commands are centred against the whole block. `align-self` on the
+   child beats `align-items` on the parent, which is why this targets the bar
+   itself. Scoped to this card, the only one with a two-line title. */
+.diff-pane .bolt-header-commandbar,
+.diff-pane .bolt-header-commandbar-button-group {
+  align-self: center;
+}
+
+/* File name on the title line, its folder underneath as a subtitle, so a deep
+   path costs one small line instead of the width of the header. */
+.diff-title {
+  font-size: 0.875rem;
+}
+
+.diff-title-path {
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  font-size: 0.6875rem;
+  overflow-wrap: anywhere;
+}
+
 .diff-toolbar-note {
   align-self: center;
   margin-right: 8px;
@@ -646,17 +668,23 @@ body,
 
 /* Rendered inside the card header's command bar, so no padding or separator of
    its own: the header already provides both. */
-.diff-layout-switch {
+.diff-layout-switch,
+.diff-segmented {
   display: flex;
   align-self: center;
   margin-right: 8px;
 }
 
-/* Same box model as `.bolt-button`: inherited font, 6px/12px padding, height
-   driven by the content, so the segmented control lines up with the command
-   bar button beside it instead of being measured separately. */
-.diff-layout-switch button {
-  padding: 6px 12px;
+/* One explicit height for both groups, rather than letting text and a glyph
+   each work out their own: a 0.75rem line box and a 0.75rem icon do not agree,
+   and the two groups sit side by side. The shorter of the two wins. */
+.diff-layout-switch button,
+.diff-segmented button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 12px;
   border: 1px solid rgba(var(--palette-neutral-20, 200, 200, 200), 1);
   color: inherit;
   background: transparent;
@@ -665,16 +693,19 @@ body,
   cursor: pointer;
 }
 
-.diff-layout-switch button:first-child {
+.diff-layout-switch button:first-child,
+.diff-segmented button:first-child {
   border-radius: 2px 0 0 2px;
 }
 
-.diff-layout-switch button:last-child {
+.diff-layout-switch button:last-child,
+.diff-segmented button:last-child {
   border-radius: 0 2px 2px 0;
   border-left-width: 0;
 }
 
-.diff-layout-switch button:hover {
+.diff-layout-switch button:hover:not(:disabled),
+.diff-segmented button:hover:not(:disabled) {
   background: rgba(var(--palette-neutral-6, 239, 239, 239), 1);
 }
 
@@ -684,6 +715,18 @@ body,
   color: var(--text-primary-color, rgba(0, 0, 0, 0.9));
   background: rgba(var(--palette-neutral-8, 234, 234, 234), 1);
   font-weight: 600;
+}
+
+/* Icon alone, so the pair stays as narrow as the header allows. */
+.diff-segmented button.icon-only {
+  width: 26px;
+  padding: 0;
+}
+
+.diff-segmented button:disabled {
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  cursor: default;
+  opacity: 0.6;
 }
 
 /* The glyph toggles its thread's inline section, so it reads as a comment
@@ -720,20 +763,25 @@ body,
   background: rgb(0 120 212 / 10%);
 }
 
+/* The same comment glyph as an existing thread, so the margin reads as one
+   idea. Told apart by weight, not by shape: this one is an offer to start a
+   discussion, not a discussion that exists. */
 .guided-review-add-comment-glyph {
-  margin-left: 4px;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
   border-radius: 3px;
-  color: var(--communication-foreground, #0078d4);
   background: rgba(var(--palette-neutral-8, 234, 234, 234), 1);
   cursor: pointer;
 }
 
-.guided-review-add-comment-glyph::after {
-  content: "+";
-  display: block;
-  line-height: 16px;
-  text-align: center;
-  font-weight: 600;
+.guided-review-add-comment-glyph::before {
+  content: "\f2fe";
+  color: var(--communication-foreground, #0078d4);
+  font-family: FluentRegular, sans-serif;
+  font-size: 0.8125rem;
+  line-height: 1;
+  opacity: 0.75;
 }
 
 /* Monaco owns the outer node's height; the inner one is measured to drive it. */

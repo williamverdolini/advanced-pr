@@ -61,6 +61,18 @@ export interface DiffViewerProps<TZone extends DiffZoneAnchor> {
   onRequestComment?: (anchor: DiffSelection) => void;
   /** Fired when the glyph of an existing thread is clicked. */
   onSelectThread?: (threadId: number) => void;
+  /** Filled with the imperative commands once the editor exists. */
+  apiRef?: React.MutableRefObject<DiffViewerApi | undefined>;
+  /**
+   * Number of differences, once Monaco's worker has computed them. Reported on
+   * every recomputation, because it is only known asynchronously.
+   */
+  onDiffUpdated?: (differences: number) => void;
+}
+
+/** Imperative commands the diff exposes to the surrounding toolbar. */
+export interface DiffViewerApi {
+  goToDiff(direction: "next" | "previous"): void;
 }
 
 export interface DiffZoneAnchor {
@@ -98,6 +110,9 @@ type DiffSideKey = "left" | "right";
  */
 interface EditorHandle {
   readonly kind: "diff" | "single";
+  goToDiff(direction: "next" | "previous"): void;
+  differenceCount(): number;
+  onDidUpdateDiff(callback: () => void): monaco.IDisposable | undefined;
   /** The only side rendered in single mode; both sides exist in diff mode. */
   readonly side: DiffSideKey;
   sideEditor(side: DiffSideKey): monaco.editor.ICodeEditor;
@@ -147,6 +162,8 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
   onSelectionChange,
   onRequestComment,
   onSelectThread,
+  apiRef,
+  onDiffUpdated,
 }: DiffViewerProps<TZone>): React.ReactElement {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const editorRef = React.useRef<EditorHandle>();
@@ -167,10 +184,20 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
 
   // Editor creation must happen exactly once: recreating it would drop every
   // mounted zone. Callbacks therefore travel through a ref instead of deps.
-  const callbacksRef = React.useRef({ onSelectionChange, onRequestComment, onSelectThread });
+  const callbacksRef = React.useRef({
+    onSelectionChange,
+    onRequestComment,
+    onSelectThread,
+    onDiffUpdated,
+  });
 
   React.useEffect(() => {
-    callbacksRef.current = { onSelectionChange, onRequestComment, onSelectThread };
+    callbacksRef.current = {
+      onSelectionChange,
+      onRequestComment,
+      onSelectThread,
+      onDiffUpdated,
+    };
   });
 
   React.useEffect(() => {
@@ -188,6 +215,16 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
     const editor = createEditorHandle(containerRef.current, singleFile, singleFileSide);
     editorRef.current = editor;
     const sides = editorSides(editor);
+
+    if (apiRef) {
+      apiRef.current = { goToDiff: (direction) => editor.goToDiff(direction) };
+    }
+
+    // The count is only known once the worker has run, and again after every
+    // model change, so it is reported rather than read on demand.
+    const diffSubscription = editor.onDidUpdateDiff(() =>
+      callbacksRef.current.onDiffUpdated?.(editor.differenceCount()),
+    );
 
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -216,6 +253,10 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
       event.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN
         ? event.target.position?.lineNumber
         : undefined;
+
+    /** Any line under the pointer, code or margin: the affordance follows the row. */
+    const hoveredLine = (event: monaco.editor.IEditorMouseEvent): number | undefined =>
+      event.target.position?.lineNumber;
 
     const handleGlyphClick = (
       side: DiffSideKey,
@@ -248,9 +289,17 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
     // line of a selection so selected code always has a visible target.
     const hovered: Partial<Record<DiffSideKey, number>> = {};
     const pinned: Partial<Record<DiffSideKey, number>> = {};
+    // Now that the pointer is tracked over the whole editor and not just the
+    // margin, the decoration is only rewritten when the line actually changes.
+    const shown: Partial<Record<DiffSideKey, number>> = {};
 
     const refreshAddAffordance = (side: DiffSideKey): void => {
       const line = hovered[side] ?? pinned[side];
+      if (line === shown[side]) {
+        return;
+      }
+
+      shown[side] = line;
       const target =
         line !== undefined && !commentedLinesRef.current[side].has(line)
           ? [createAddCommentDecoration(line)]
@@ -277,7 +326,7 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
         }),
         codeEditor.onMouseDown((event) => handleGlyphClick(side, event)),
         codeEditor.onMouseMove((event) => {
-          hovered[side] = glyphMarginLine(event);
+          hovered[side] = hoveredLine(event);
           refreshAddAffordance(side);
         }),
         codeEditor.onMouseLeave(() => {
@@ -289,6 +338,10 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
 
     return () => {
       subscriptions.forEach((subscription) => subscription.dispose());
+      diffSubscription?.dispose();
+      if (apiRef) {
+        apiRef.current = undefined;
+      }
       stopThemeObserver();
       Object.values(hoverCollectionsRef.current).forEach((collection) => collection?.clear());
       hoverCollectionsRef.current = {};
@@ -302,7 +355,7 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
       editorRef.current = undefined;
       editor.dispose();
     };
-  }, [singleFile, singleFileSide]);
+  }, [apiRef, singleFile, singleFileSide]);
 
   React.useEffect(() => {
     editorRef.current?.setSideBySide(renderSideBySide);
@@ -538,6 +591,10 @@ function createEditorHandle(
     return {
       kind: "single",
       side: singleFileSide,
+      // A file shown on one side alone has nothing to navigate between.
+      goToDiff: () => undefined,
+      differenceCount: () => 0,
+      onDidUpdateDiff: () => undefined,
       sideEditor: () => editor,
       setModels: ({ original, modified }) =>
         editor.setModel(singleFileSide === "left" ? (original ?? modified) : modified),
@@ -554,6 +611,9 @@ function createEditorHandle(
   return {
     kind: "diff",
     side: "right",
+    goToDiff: (direction) => editor.goToDiff(direction),
+    differenceCount: () => editor.getLineChanges()?.length ?? 0,
+    onDidUpdateDiff: (callback) => editor.onDidUpdateDiff(callback),
     sideEditor: (side) =>
       side === "left" ? editor.getOriginalEditor() : editor.getModifiedEditor(),
     setModels: ({ original, modified }) =>

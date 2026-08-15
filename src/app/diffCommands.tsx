@@ -1,15 +1,17 @@
 import * as React from "react";
 import type { IHeaderCommandBarItem } from "azure-devops-ui/HeaderCommandBar";
 import { DiffLayoutSwitch } from "./DiffLayoutSwitch";
+import { DiffNavigation } from "./DiffNavigation";
 
 export interface DiffCommandsInput {
   /** A file that exists on one side only has no sides to lay out. */
   contentOnly: boolean;
   contentSide: "left" | "right";
   sideBySide: boolean;
-  hasSelection: boolean;
+  /** Only known once Monaco's worker has compared the two sides. */
+  differenceCount: number;
   onSideBySideChange: (sideBySide: boolean) => void;
-  onCommentOnSelection: () => void;
+  onGoToDifference: (direction: "next" | "previous") => void;
 }
 
 /**
@@ -20,9 +22,9 @@ export function buildDiffCommands({
   contentOnly,
   contentSide,
   sideBySide,
-  hasSelection,
+  differenceCount,
   onSideBySideChange,
-  onCommentOnSelection,
+  onGoToDifference,
 }: DiffCommandsInput): IHeaderCommandBarItem[] {
   return [
     {
@@ -42,18 +44,15 @@ export function buildDiffCommands({
         ),
     },
     {
-      id: "comment-on-selection",
-      text: "Comment on selection",
-      iconProps: { iconName: "CommentAdd" },
-      disabled: !hasSelection,
-      important: true,
-      tooltipProps: {
-        text: hasSelection ? "Comment on the selected code" : "Select code in the file first",
-      },
-      onActivate: () => {
-        onCommentOnSelection();
-        return true;
-      },
+      id: "difference-navigation",
+      text: "Differences",
+      renderButton: () => (
+        <DiffNavigation
+          key="difference-navigation"
+          differenceCount={differenceCount}
+          onGoToDifference={onGoToDifference}
+        />
+      ),
     },
   ];
 }

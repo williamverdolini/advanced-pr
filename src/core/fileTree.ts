@@ -55,6 +55,32 @@ export function buildFileTree<TFile extends { path: string }>(
   return materializeChildren(root);
 }
 
+/**
+ * Files in the order the tree shows them: folders first, then files, both by
+ * name. It is not the order the API returns them in, which is why picking "the
+ * first file" from the raw list lands somewhere in the middle of the list the
+ * reviewer is looking at.
+ */
+export function collectFiles<TFile extends { path: string }>(
+  nodes: readonly FileTreeNode<TFile>[],
+): TFile[] {
+  return nodes.flatMap((node) =>
+    node.kind === "file" ? [node.file] : collectFiles(node.children),
+  );
+}
+
+/**
+ * Where a reviewer should land when entering a step: the first file they have
+ * not marked as viewed, or the first one when everything has been seen.
+ */
+export function nextFileToReview<TFile extends { path: string }>(
+  files: readonly TFile[],
+  viewed: ReadonlySet<string>,
+): TFile | undefined {
+  const ordered = collectFiles(buildFileTree(files));
+  return ordered.find((file) => !viewed.has(file.path)) ?? ordered[0];
+}
+
 export function collectFolderPaths<TFile extends { path: string }>(
   nodes: readonly FileTreeNode<TFile>[],
 ): string[] {

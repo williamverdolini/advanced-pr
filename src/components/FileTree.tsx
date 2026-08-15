@@ -43,7 +43,11 @@ export function FileTree({
   };
 
   return (
-    <ul className="file-tree" role="tree" aria-label="Changed files">
+    <ul
+      className="file-tree custom-scrollbar scroll-auto-hide"
+      role="tree"
+      aria-label="Changed files"
+    >
       <TreeNodes
         nodes={nodes}
         level={1}

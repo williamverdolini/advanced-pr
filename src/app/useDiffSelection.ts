@@ -1,4 +1,5 @@
 import * as React from "react";
+import { anchorForComment } from "../core/commentAnchor";
 import type { DiffSelection } from "../components/DiffViewer";
 
 export interface DiffSelectionState {
@@ -10,9 +11,8 @@ export interface DiffSelectionState {
   /** The live range, read at the moment an action needs it. */
   current: () => DiffSelection | undefined;
   /**
-   * What a click in the glyph margin should anchor a comment to: the line
-   * clicked, unless it lands inside a live selection, in which case the selected
-   * range is what gets anchored.
+   * What a click in the glyph margin should anchor a comment to: the live
+   * selection when there is one on the same side, otherwise the line clicked.
    */
   anchorFor: (line: DiffSelection) => DiffSelection;
 }
@@ -37,15 +37,10 @@ export function useDiffSelection(): DiffSelectionState {
 
   const current = React.useCallback((): DiffSelection | undefined => selection.current, []);
 
-  const anchorFor = React.useCallback((line: DiffSelection): DiffSelection => {
-    const live = selection.current;
-    const withinSelection =
-      live &&
-      live.side === line.side &&
-      line.startLine >= live.startLine &&
-      line.startLine <= live.endLine;
-    return withinSelection ? live : line;
-  }, []);
+  const anchorFor = React.useCallback(
+    (line: DiffSelection): DiffSelection => anchorForComment(line, selection.current),
+    [],
+  );
 
   return { hasSelection, track, clear, current, anchorFor };
 }

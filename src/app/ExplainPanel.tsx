@@ -16,7 +16,7 @@ export function ExplainPanel({
   onExpand,
 }: ExplainPanelProps): React.ReactElement {
   return (
-    <details className="explain-panel" open>
+    <details className="explain-panel">
       <summary>
         <span className="explain-title">Explain</span>
         <span className="explain-step">{stepTitle}</span>

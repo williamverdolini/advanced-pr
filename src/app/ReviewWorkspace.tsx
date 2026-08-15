@@ -10,11 +10,16 @@ import {
   SplitterDirection,
   SplitterElementPosition,
 } from "azure-devops-ui/Splitter";
-import { DiffViewer, type DiffSelection } from "../components/DiffViewer";
+import {
+  DiffViewer,
+  type DiffSelection,
+  type DiffViewerApi,
+} from "../components/DiffViewer";
 import { FileTree } from "../components/FileTree";
 import { Markdown } from "../components/Markdown";
 import { MentionContext } from "../components/mentionContext";
 import { contentSideForChange, isContentOnlyChange } from "../core/changeType";
+import { nextFileToReview } from "../core/fileTree";
 import type { InlineZoneDescriptor } from "../core/inlineZones";
 import type { ReviewStep } from "../core/reviewPlan";
 import { indexThreadsByFile } from "../core/threadIndex";
@@ -171,8 +176,22 @@ export function ReviewWorkspace({
     setSelectedStepId(step.stepId);
     setSelectedThreadId(undefined);
     setDraft(undefined);
-    setSelectedFile(workspace.files.find((file) => step.files.includes(file.path)));
+    setSelectedFile(
+      nextFileToReview(
+        workspace.files.filter((file) => step.files.includes(file.path)),
+        viewedFiles,
+      ),
+    );
   };
+
+  const diffApiRef = React.useRef<DiffViewerApi>();
+  // Reported by Monaco once it has compared the two sides, and reset per file
+  // so the arrows are never enabled against a diff that is not there yet.
+  const [differenceCount, setDifferenceCount] = React.useState(0);
+
+  React.useEffect(() => {
+    setDifferenceCount(0);
+  }, [selectedFile]);
 
   // The callbacks below are memoized because they are passed to `FileTree` and
   // `DiffViewer`, where a new function identity on every render would rebuild
@@ -213,14 +232,6 @@ export function ReviewWorkspace({
     },
     [selection],
   );
-
-  const commentOnSelection = (): void => {
-    const live = selection.current();
-    if (live) {
-      setDraft(live);
-      setSelectedThreadId(undefined);
-    }
-  };
 
   const submitDraft = async (content: string): Promise<void> => {
     if (!selectedFile || !draft) {
@@ -368,16 +379,28 @@ export function ReviewWorkspace({
           onRenderFarElement={() => (
             <Card
               className="diff-pane"
-              titleProps={{ text: selectedFile?.path ?? "Diff", size: TitleSize.Medium }}
+              // Name on the title line, folder underneath: the full path of a
+              // deeply nested file would push the commands off the header.
+              titleProps={{
+                text: selectedFile ? fileName(selectedFile.path) : "Diff",
+                size: TitleSize.Small,
+                className: "diff-title",
+              }}
+              headerDescriptionProps={
+                selectedFile
+                  ? { text: selectedFile.path, className: "diff-title-path" }
+                  : undefined
+              }
               headerCommandBarItems={
                 selectedFile
                   ? buildDiffCommands({
                       contentOnly,
                       contentSide,
                       sideBySide,
-                      hasSelection: selection.hasSelection,
+                      differenceCount,
                       onSideBySideChange: setSideBySide,
-                      onCommentOnSelection: commentOnSelection,
+                      onGoToDifference: (direction) =>
+                        diffApiRef.current?.goToDiff(direction),
                     })
                   : undefined
               }
@@ -410,6 +433,8 @@ export function ReviewWorkspace({
                   onSelectionChange={selection.track}
                   onSelectThread={toggleThreadFromGlyph}
                   onRequestComment={requestComment}
+                  apiRef={diffApiRef}
+                  onDiffUpdated={setDifferenceCount}
                 />
               )}
             </Card>
@@ -447,4 +472,9 @@ export function ReviewWorkspace({
       </section>
     </MentionContext.Provider>
   );
+}
+
+/** The last segment of a repository path. */
+function fileName(path: string): string {
+  return path.slice(path.lastIndexOf("/") + 1);
 }
