@@ -22,6 +22,7 @@ import { contentSideForChange, isContentOnlyChange } from "../core/changeType";
 import { nextFileToReview } from "../core/fileTree";
 import type { InlineZoneDescriptor } from "../core/inlineZones";
 import type { ReviewStep } from "../core/reviewPlan";
+import { maxSplitterWidth, minSplitterWidth } from "../core/splitterWidth";
 import { indexThreadsByFile } from "../core/threadIndex";
 import {
   createAnchoredThread,
@@ -30,6 +31,7 @@ import {
   type PullRequestWorkspace,
   type ReviewThread,
 } from "../platform/azureDevOpsClient";
+import { loadSplitterWidth, saveSplitterWidth } from "../platform/splitterWidthStore";
 import { buildDiffCommands } from "./diffCommands";
 import { ExplainPanel } from "./ExplainPanel";
 import { InlineComposer } from "./InlineComposer";
@@ -74,6 +76,9 @@ export function ReviewWorkspace({
   const [explainExpanded, setExplainExpanded] = React.useState(false);
   const [planEditorOpen, setPlanEditorOpen] = React.useState(false);
   const [planDraft, setPlanDraft] = React.useState(() => createPlanTemplate(workspace));
+  // Read once, on mount: the Splitter owns its width from there on, and feeding
+  // it back a value it already applied would fight the drag in progress.
+  const [initialSplitterWidth] = React.useState(loadSplitterWidth);
 
   const resolveMention = useMentionDirectory(workspace);
   const collapsed = useCollapsedThreads();
@@ -341,9 +346,10 @@ export function ReviewWorkspace({
           ariaLabel="Files splitter"
           splitterDirection={SplitterDirection.Vertical}
           fixedElement={SplitterElementPosition.Near}
-          initialFixedSize={280}
-          minFixedSize={180}
-          maxFixedSize={720}
+          initialFixedSize={initialSplitterWidth}
+          minFixedSize={minSplitterWidth}
+          maxFixedSize={maxSplitterWidth}
+          onFixedSizeChanged={saveSplitterWidth}
           nearElementClassName="workspace-pane"
           farElementClassName="workspace-pane"
           onRenderNearElement={() => (

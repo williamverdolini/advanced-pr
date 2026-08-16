@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1
+
+- The files pane opens at **400px** instead of 280px, and **remembers the width** it was
+  dragged to: the splitter position is written to the browser's local storage and read back on
+  the next refresh, or the next time the tab is opened. A width outside the pane's limits, or
+  one that cannot be read, falls back to 400px.
+
 ## 0.5.0
 
 Reading the file tree.
