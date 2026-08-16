@@ -550,7 +550,6 @@ body,
      shorthand from its ancestors, so a bold ancestor would reach the tree. */
   font-weight: normal;
   text-align: left;
-  overflow-wrap: anywhere;
   cursor: pointer;
 }
 
@@ -558,12 +557,20 @@ body,
   display: flex;
   align-items: center;
   gap: 6px;
-  font-family: "Cascadia Mono", Menlo, Consolas, "Courier New", monospace;
+  /* Same face as the host's own Files tab: `font` pulls family and size from
+     the row, so the tree does not read as a terminal next to it. */
+  font: inherit;
+  font-weight: normal;
 }
 
+/* A long name is truncated rather than wrapped: a row keeps one line, so the
+   tree stays scannable and its rows stay the same height. The button carries
+   the full path as its title, which is where the hidden part is read. */
 .file-tree-name {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* A deleted file reads as gone at a glance, without opening it. */
@@ -616,6 +623,22 @@ body,
   align-self: center;
 }
 
+/* `TitleSize.Small` pads the title itself 6px above and below, which assumes a
+   title standing alone; ours has a subtitle under it, so that padding opens a
+   gap in the middle of the block. It moves out to the title area, where the 4px
+   surrounds title and subtitle together. Written as CSS rather than passed as a
+   class because `Header` renders `HeaderTitleArea` with no `className` prop of
+   its own. Scoped to this card, the only one with a two-line title. */
+.diff-pane .bolt-header-title-area {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.diff-pane .bolt-header-title.s {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 /* File name on the title line, its folder underneath as a subtitle, so a deep
    path costs one small line instead of the width of the header. */
 .diff-title {
@@ -642,6 +665,15 @@ body,
   gap: 6px;
   font: inherit;
   font-weight: normal;
+}
+
+/* Truncated like a file name, but only the name shrinks: the counter beside it
+   is what the folder row exists to show, so it never gives up its width. */
+.file-tree-folder-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .file-tree-folder small {

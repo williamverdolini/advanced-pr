@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0
+
+Reading the file tree.
+
+- A file name too long for the tree is **cut with an ellipsis** instead of wrapping onto a
+  second line, so every row is the same height and the list stays scannable. The full path is
+  still on the row's tooltip.
+- Folder rows are cut the same way, but only the name gives up width: the `viewed/total`
+  counter beside it stays visible whatever the name's length.
+- File names use the host's interface font, the same one the native **Files** tab uses, in
+  place of the monospace face.
+
 ## 0.4.0
 
 Moving through a file, and reading it.

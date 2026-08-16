@@ -235,7 +235,7 @@ function TreeNodes({
                 title={node.path}
                 onClick={() => onToggleFolder(node.path)}
               >
-                <span>{node.name}</span>
+                <span className="file-tree-folder-name">{node.name}</span>
                 <small>{viewedCount}/{node.filePaths.length}</small>
               </button>
             </div>
