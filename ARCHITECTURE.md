@@ -43,6 +43,7 @@ except `hash.ts` (asserted through `reviewPlan`'s tests, which depend on it).
 | `viewedFiles.ts` | Reconciles viewed marks against blob revisions, so a new push clears the stale ones |
 | `toggleSet.ts` | Immutable membership updates for the `ReadonlySet` values held in React state |
 | `theme.ts` | Whether a host CSS colour is dark |
+| `splitterWidth.ts` | The files pane's default width and limits; reads a stored width back |
 | `hash.ts` | `stableHash`, the deterministic hash behind plan and step identity |
 
 **`src/platform/`** — the only layer that performs I/O. These are the services:
@@ -55,6 +56,7 @@ injection* below).
 | `extensionContext.ts` | SDK handshake: signed-in user, pull request context, hosted-or-not |
 | `identityService.ts` | The host's identity picker, for mentions. Caches every identity it has seen |
 | `viewedFilesStore.ts` | Per-user viewed marks, in the extension data service |
+| `splitterWidthStore.ts` | The files pane's width, in the browser's local storage |
 | `hostNavigation.ts` | Reads and writes the host's `path` query parameter |
 | `hostTheme.ts` | Observes the host's light or dark theme |
 
