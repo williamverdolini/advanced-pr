@@ -187,6 +187,28 @@ export function hasOutstandingChanges(
   );
 }
 
+export interface StepDecisionTally {
+  approved: number;
+  changesRequested: number;
+}
+
+/**
+ * Every reviewer's decision on one step, counted. `summarizeStepApprovals` asks
+ * the same question for one reviewer across the steps; the wizard needs it the
+ * other way round, because a step anyone has asked changes on is a step the
+ * whole pull request should see as unfinished, not only its author.
+ */
+export function tallyStepDecisions(
+  decisions: readonly StepDecision[],
+): StepDecisionTally {
+  return {
+    approved: decisions.filter((decision) => decision.status === "approved").length,
+    changesRequested: decisions.filter(
+      (decision) => decision.status === "changes-requested",
+    ).length,
+  };
+}
+
 export interface StepApprovalRequirement {
   stepId: string;
   /** Empty steps are informational and never block the sign-off (§5.3). */

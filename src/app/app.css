@@ -209,6 +209,16 @@ body,
   padding: 0 2px;
 }
 
+/* A step anyone has asked changes on, in the same amber as the step number and
+   the panel's own dots. The step number speaks for the reviewer looking at it,
+   so without this a step held up by somebody else looks untouched. The rule sets
+   `color` on the button and lets the glyph inherit it: the library gives its
+   subtle buttons a background but no icon colour, so there is nothing to fight,
+   including on hover. */
+.step-decisions-button.changes-requested {
+  color: var(--status-warning-foreground, rgba(250, 157, 45, 1));
+}
+
 .step-decisions-panel {
   min-width: 220px;
   max-width: 340px;

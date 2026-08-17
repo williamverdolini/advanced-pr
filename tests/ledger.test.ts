@@ -7,6 +7,7 @@ import {
   parseLedgerEvent,
   reduceReviewEvents,
   summarizeStepApprovals,
+  tallyStepDecisions,
   type ReviewEvent,
 } from "../src/core/ledger";
 
@@ -232,6 +233,30 @@ describe("review ledger", () => {
       const state = reduceReviewEvents([event({ stepId: "step-1" })], currentPlan);
 
       expect(state.stepDecisions.get("step-2")).toBeUndefined();
+    });
+
+    it("counts a step's decisions, so one request for changes marks it for everybody", () => {
+      const state = reduceReviewEvents(
+        [
+          event({}),
+          event({ eventId: "event-2", reviewerId: "reviewer-2", commentId: 2 }),
+          event({
+            eventId: "event-3",
+            reviewerId: "reviewer-3",
+            kind: "step-changes-requested",
+            commentId: 3,
+          }),
+        ],
+        currentPlan,
+      );
+
+      expect(
+        tallyStepDecisions([...(state.stepDecisions.get("step-1")?.values() ?? [])]),
+      ).toEqual({ approved: 2, changesRequested: 1 });
+    });
+
+    it("counts nothing on a step nobody has decided on", () => {
+      expect(tallyStepDecisions([])).toEqual({ approved: 0, changesRequested: 0 });
     });
   });
 

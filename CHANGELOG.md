@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.2
+
+- The **decisions icon** on a step turns amber as soon as any reviewer has asked for changes on
+  it, so a step held up by somebody else is visible to everyone without opening the panel. The
+  step number keeps speaking for the reviewer looking at it. The icon's tooltip and its
+  accessible name now count both decisions, so the warning does not rest on colour alone.
+
 ## 0.5.1
 
 - The files pane opens at **400px** instead of 280px, and **remembers the width** it was
