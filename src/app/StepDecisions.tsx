@@ -4,7 +4,7 @@ import { Callout } from "azure-devops-ui/Callout";
 import { IconSize } from "azure-devops-ui/Icon";
 import { Location } from "azure-devops-ui/Utilities/Position";
 import { MentionContext } from "../components/mentionContext";
-import type { StepDecision } from "../core/ledger";
+import { tallyStepDecisions, type StepDecision } from "../core/ledger";
 import { formatDate } from "./formatDate";
 
 export interface StepDecisionsProps {
@@ -18,7 +18,9 @@ export interface StepDecisionsProps {
 /**
  * Who has decided on a step, on demand. The step number already says what *this*
  * reviewer decided; on a pull request with several reviewers it says nothing
- * about the others, and the ledger knows.
+ * about the others, and the ledger knows. The button itself carries the one part
+ * of that worth seeing without opening anything: whether somebody is asking for
+ * changes here.
  */
 export function StepDecisions({
   stepTitle,
@@ -42,14 +44,23 @@ export function StepDecisions({
     return null;
   }
 
-  const approved = decisions.filter((decision) => decision.status === "approved").length;
-  const summary = `${approved} of ${decisions.length} approved`;
+  const tally = tallyStepDecisions(decisions);
+  // Spelled out rather than left to the colour: a reviewer using a screen reader,
+  // or one of the host's high-contrast themes, gets the same warning.
+  const summary =
+    tally.changesRequested > 0
+      ? `${tally.approved} of ${decisions.length} approved, ${tally.changesRequested} asked for changes`
+      : `${tally.approved} of ${decisions.length} approved`;
 
   return (
     <span className="step-decisions" ref={anchor}>
       <Button
         subtle
-        className="step-decisions-button"
+        className={
+          tally.changesRequested > 0
+            ? "step-decisions-button changes-requested"
+            : "step-decisions-button"
+        }
         iconProps={{ iconName: "People", size: IconSize.small }}
         ariaLabel={`Who decided on ${stepTitle}: ${summary}`}
         ariaExpanded={Boolean(anchored)}
