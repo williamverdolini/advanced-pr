@@ -4,7 +4,8 @@ export type MarkdownInline =
   | { kind: "emphasis"; children: MarkdownInline[] }
   | { kind: "code"; value: string }
   | { kind: "mention"; id: string }
-  | { kind: "link"; href: string; children: MarkdownInline[] };
+  | { kind: "link"; href: string; children: MarkdownInline[] }
+  | { kind: "image"; alt: string; href: string };
 
 export type MarkdownBlock =
   | { kind: "paragraph"; lines: MarkdownInline[][] }
@@ -116,6 +117,7 @@ const inlinePattern = new RegExp(
     "__(?<strongUnderscores>[\\s\\S]+?)__",
     "\\*(?<emphasisStar>[\\s\\S]+?)\\*",
     "_(?<emphasisUnderscore>[\\s\\S]+?)_",
+    "!\\[(?<imageAlt>[^\\]]*)\\]\\((?<imageHref>[^)\\s]+)\\)",
     "\\[(?<linkText>[^\\]]*)\\]\\((?<linkHref>[^)\\s]+)\\)",
   ].join("|"),
 );
@@ -139,6 +141,10 @@ export function toPlainText(
             return node.value;
           case "mention":
             return `@${resolveMention?.(node.id)?.displayName ?? "unknown"}`;
+          // An image is a file name in a summary; the picture itself is only
+          // worth the space in the comment.
+          case "image":
+            return node.alt;
           default:
             return flattenInline(node.children);
         }
@@ -201,6 +207,11 @@ export function parseInline(text: string): MarkdownInline[] {
         kind: "emphasis",
         children: parseInline(groups.emphasisStar ?? groups.emphasisUnderscore),
       });
+    } else if (groups.imageHref !== undefined) {
+      // The href is kept as written, unchecked: the renderer decides between an
+      // image and its alternative text, and an upload still in flight is an
+      // image node whose href is not a URL yet.
+      nodes.push({ kind: "image", alt: groups.imageAlt ?? "", href: groups.imageHref });
     } else if (groups.linkHref !== undefined) {
       const href = safeLinkHref(groups.linkHref);
       const children = parseInline(groups.linkText || groups.linkHref);
@@ -224,4 +235,15 @@ export function safeLinkHref(href: string): string | undefined {
   }
 
   return /^[/#]/.test(value) ? value : undefined;
+}
+
+/**
+ * Images are loaded, not clicked, so a scheme the browser would fetch as an
+ * image is all that survives: a relative href would resolve against the iframe,
+ * where nothing is served, and an attachment still uploading has no URL at all.
+ */
+export function safeImageHref(href: string): string | undefined {
+  const value = href.trim();
+
+  return /^https?:\/\//i.test(value) ? value : undefined;
 }

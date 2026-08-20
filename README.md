@@ -36,7 +36,7 @@ The `### Explain` block is optional and purely descriptive: it is shown above th
 
 **Related files hang off a file entry.** A bullet indented under another one is a file worth reading *beside* it, typically the test that covers it: the row shows a counter that expands into the related files, each of them openable, commentable and markable as viewed like any other. They are context, not work, so they never count towards the step's file total, and a related file still lands in `Everything else` unless some step lists it on a line of its own. Adding or rewriting them never invalidates an approval, for the same reason `### Explain` does not.
 
-**Puts comments inside the diff.** Threads render under the line they refer to, with reply, edit, like and resolve in place, and replying and resolving in one action. Markdown is rendered, with a live preview while writing, and the comment icon in the margin opens and closes each thread. The file tree lists threads under their file, so the same selection drives the tree, the margin and the editor.
+**Puts comments inside the diff.** Threads render under the line they refer to, with reply, edit, like and resolve in place, and replying and resolving in one action. Markdown is rendered, with a live preview while writing, and the comment icon in the margin opens and closes each thread. An image pasted into a comment is uploaded as a pull request attachment and linked from the text, the way the native Files tab does it, so the screenshot is part of the discussion in both interfaces. The file tree lists threads under their file, so the same selection drives the tree, the margin and the editor.
 
 **Renders a diff that reads like the native one.** Monaco, unified by default with a side-by-side switch, following the host's light or dark theme. Added and deleted files are shown as plain content instead of a diff against nothing; the tree marks each file as added, modified, deleted or renamed, and tracks which ones you have viewed.
 
@@ -76,7 +76,7 @@ The extension is a static page that calls the Azure DevOps REST API from the bro
 
 | Scope | Why |
 |---|---|
-| `vso.code_write` | Read the pull request, its iterations and file contents; create comment threads; set the reviewer vote |
+| `vso.code_write` | Read the pull request, its iterations and file contents; create comment threads; upload and read the attachments images in comments are stored as; set the reviewer vote |
 | `vso.threads_full` | Read and write comment threads, including likes |
 | `vso.extension.data_write` | Store, per user, which files have been marked as viewed |
 

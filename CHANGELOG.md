@@ -15,6 +15,13 @@ Feedback that survives the plan.
   gone without being told. Nothing is deleted — the reset is one more comment and the decisions
   it clears stay readable — and no reviewer's vote is changed, because Azure DevOps only lets
   each reviewer set their own.
+- **An image can be pasted into a comment.** A screenshot in the clipboard is uploaded as an
+  attachment of the pull request and linked from the comment, the way the native Files tab does
+  it, so it is part of the discussion in both interfaces — and it is rendered inline, in the
+  live preview while writing and in the thread once posted. Text in the clipboard wins over an
+  image beside it, which is what copying a range out of Excel puts there. Attachments are read
+  back through the extension's own token, because a comment is rendered in an iframe where the
+  browser sends no Azure DevOps cookie.
 - Step ids are now readable: `step-sort-contract` instead of `step-a91f3c2d`, which is what the
   decision comments in the pull request carry.
 - The plan marker is documented in the README, for the case where the first plan is posted by a

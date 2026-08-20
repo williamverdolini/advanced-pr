@@ -1,9 +1,11 @@
 import * as React from "react";
 import {
   parseMarkdown,
+  safeImageHref,
   type MarkdownBlock,
   type MarkdownInline,
 } from "../core/markdown";
+import { AttachmentContext } from "./attachmentContext";
 import { MentionContext } from "./mentionContext";
 
 export interface MarkdownProps {
@@ -129,10 +131,82 @@ function Inline({ nodes }: { nodes: MarkdownInline[] }): React.ReactElement {
                 <Inline nodes={node.children} />
               </a>
             );
+          case "image":
+            return <InlineImage key={index} alt={node.alt} href={node.href} />;
           default:
             return <React.Fragment key={index}>{node.value}</React.Fragment>;
         }
       })}
     </>
+  );
+}
+
+/**
+ * An image in a comment. The href never reaches the element as it is: a pull
+ * request attachment has to be read through the REST client, and an upload still
+ * in flight has no href at all, in which case the alternative text — the file
+ * name the editor wrote — stands in for the picture. The attachment service
+ * decides; without one, only a URL the browser can load by itself is any use.
+ */
+function InlineImage({ alt, href }: { alt: string; href: string }): React.ReactElement {
+  const attachments = React.useContext(AttachmentContext);
+  const [source, setSource] = React.useState<string>();
+  const [fellBack, setFellBack] = React.useState(false);
+  const direct = safeImageHref(href);
+
+  React.useEffect(() => {
+    let active = true;
+    const resolved = attachments
+      ? attachments.resolveImage(href, alt)
+      : Promise.resolve(safeImageHref(href));
+
+    void resolved.then(
+      (loadable) => {
+        if (active) {
+          setFellBack(false);
+          setSource(loadable);
+        }
+      },
+      () => {
+        if (active) {
+          setSource(undefined);
+        }
+      },
+    );
+
+    return () => {
+      active = false;
+    };
+  }, [alt, attachments, href]);
+
+  // The object URL was refused — a content policy on the page can do that — so
+  // the href itself is worth one attempt before the picture is given up on.
+  const retryOrGiveUp = (): void => {
+    if (fellBack || !direct || direct === source) {
+      setSource(undefined);
+
+      return;
+    }
+
+    setFellBack(true);
+    setSource(direct);
+  };
+
+  if (!source) {
+    return (
+      <span className="markdown-image-placeholder" title={href}>
+        {alt || "image"}
+      </span>
+    );
+  }
+
+  return (
+    <img
+      className="markdown-image"
+      src={source}
+      alt={alt}
+      title={alt}
+      onError={retryOrGiveUp}
+    />
   );
 }

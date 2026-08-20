@@ -9,6 +9,7 @@ import {
   type GitPullRequestCommentThread,
   type IdentityRefWithVote,
 } from "azure-devops-extension-api/Git";
+import { imageMediaType, uniqueAttachmentName } from "../core/attachments";
 import { classifyFileChange, type FileChangeKind } from "../core/changeType";
 import { languageForPath } from "../core/language";
 import {
@@ -123,6 +124,13 @@ export interface FileDiffContent {
  * diff effect must not re-run when only threads change.
  */
 export type BlobSource = Pick<PullRequestWorkspace, "repositoryId" | "projectId">;
+
+/**
+ * Everything needed to read and write attachments. Narrow for the same reason
+ * as `BlobSource`: the images cached against it must survive a refresh of the
+ * threads.
+ */
+export type AttachmentSource = Pick<PullRequestWorkspace, "id" | "repositoryId" | "projectId">;
 
 type ThreadProjection = Pick<
   PullRequestWorkspace,
@@ -490,6 +498,60 @@ export async function setCommentLiked(
   } else {
     await client.deleteLike(repositoryId, pullRequestId, threadId, commentId, projectId);
   }
+}
+
+export interface CommentAttachment {
+  name: string;
+  url: string;
+}
+
+/**
+ * Stores a file as an attachment of the pull request, which is where an image
+ * pasted into a comment goes: the comment itself only carries a link to it, and
+ * the attachment outlives every edit of the text around it.
+ */
+export async function uploadCommentAttachment(
+  source: AttachmentSource,
+  fileName: string,
+  content: ArrayBuffer,
+): Promise<CommentAttachment> {
+  const client = gitClient();
+  // Attachments are addressed by name within the pull request, and a second
+  // upload under a taken name replaces the file behind it — which may be an
+  // image somebody else's comment links to. Every screenshot arrives called
+  // `image.png`, so the names already there are read first.
+  const existing = await client.getAttachments(source.repositoryId, source.id, source.projectId);
+  const name = uniqueAttachmentName(
+    fileName,
+    existing.map((attachment) => attachment.displayName),
+  );
+  const created = await client.createAttachment(
+    content,
+    name,
+    source.repositoryId,
+    source.id,
+    source.projectId,
+  );
+
+  return { name, url: created.url };
+}
+
+/**
+ * Reads an attachment back for display. The endpoint answers with the bytes and
+ * no usable content type, so the media type is taken from the name.
+ */
+export async function loadCommentAttachment(
+  source: AttachmentSource,
+  fileName: string,
+): Promise<Blob> {
+  const content = await gitClient().getAttachmentContent(
+    fileName,
+    source.repositoryId,
+    source.id,
+    source.projectId,
+  );
+
+  return new Blob([content], { type: imageMediaType(fileName) ?? "application/octet-stream" });
 }
 
 function mapPullRequestState(status: PullRequestStatus): PullRequestState {

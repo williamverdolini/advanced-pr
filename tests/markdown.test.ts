@@ -3,7 +3,9 @@ import {
   findMentionIds,
   parseInline,
   parseMarkdown,
+  safeImageHref,
   safeLinkHref,
+  toPlainText,
 } from "../src/core/markdown";
 
 describe("comment markdown", () => {
@@ -43,6 +45,33 @@ describe("comment markdown", () => {
     ).toBe("[x](javascript:alert(1))");
     expect(safeLinkHref("JavaScript:alert(1)")).toBeUndefined();
     expect(safeLinkHref("mailto:a@b.c")).toBe("mailto:a@b.c");
+  });
+
+  // A pasted screenshot: the comment carries a link to a pull request
+  // attachment, the same shape the Azure DevOps editor writes.
+  describe("images", () => {
+    const href =
+      "https://dev.azure.com/org/project/_apis/git/repositories/repo/pullRequests/2/attachments/image.png";
+
+    it("parses an image, and does not read it as a link with a stray bang", () => {
+      expect(parseInline(`see ![image.png](${href})`)).toEqual([
+        { kind: "text", value: "see " },
+        { kind: "image", alt: "image.png", href },
+      ]);
+    });
+
+    it("keeps the href unchecked, so the renderer can show an upload in flight", () => {
+      expect(parseInline("![Uploading image.png…](upload:1)")).toEqual([
+        { kind: "image", alt: "Uploading image.png…", href: "upload:1" },
+      ]);
+      expect(safeImageHref("upload:1")).toBeUndefined();
+      expect(safeImageHref("blob:https://dev.azure.com/0eaee1d9")).toBeUndefined();
+      expect(safeImageHref(` ${href} `)).toBe(href);
+    });
+
+    it("summarises an image as its file name", () => {
+      expect(toPlainText(`before ![image.png](${href}) after`)).toBe("before image.png after");
+    });
   });
 
   // Real payload: "@<8BD95966-6F7D-4654-9097-300BFB3D7EE7> un commento", where
