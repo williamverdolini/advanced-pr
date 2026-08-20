@@ -36,6 +36,7 @@ except `hash.ts` (asserted through `reviewPlan`'s tests, which depend on it).
 | `ledger.ts` | Formats and parses review events; `reduceReviewEvents` rebuilds review state, and decides which events still count; sign-off eligibility |
 | `inlineZones.ts` | Decides which threads get an inline zone in the diff, and where |
 | `markdown.ts` | The Markdown subset used in comments: parse, plain-text projection, mention extraction |
+| `attachments.ts` | Attachment names that survive a Markdown href, the link written for an uploaded image, and reading a name back out of one |
 | `mentionQuery.ts`, `mentionText.ts` | Typeahead query detection; conversion between stored `@<id>` tokens and display text |
 | `fileTree.ts` | Flat paths to a folder tree; the file name of a path |
 | `threadIndex.ts` | Threads grouped by file, ordered by line |
@@ -62,8 +63,8 @@ injection* below).
 
 **`src/components/`** — `DiffViewer` (Monaco, view zones, decorations),
 `FileTree`, `Markdown`, `MarkdownCommentEditor`, `MentionTypeahead`, plus
-`mentionContext.ts` (the React context carrying the mention resolver) and
-`caretCoordinates.ts`.
+`mentionContext.ts` and `attachmentContext.ts` (the React contexts carrying the
+mention resolver and the attachment service) and `caretCoordinates.ts`.
 
 **`src/app/`** — state and composition, one file per component or concern.
 `App.tsx` owns the session and the one fetch it depends on; `ReviewWorkspace.tsx`
@@ -84,6 +85,7 @@ to "a service per concern":
 | `useInlineDiff` | What the editor needs to show comments in the code: zones, glyphs, scroll target |
 | `useViewedFiles` | The viewed marks, loaded and persisted |
 | `useMentionDirectory` | Resolving a mention id to a name |
+| `useCommentAttachments` | Uploading an image pasted into a comment, and the object URLs the rendered ones are shown from |
 | `useHostPathSync` | The open file, to and from the host's `path` parameter |
 | `useCollapsedThreads`, `useDiffSelection` | Two small pieces of diff UI state |
 
@@ -137,7 +139,8 @@ service is a module, its singleton state is module-level state (see the lazy
 `servicePromise` in `identityService.ts`), and consuming it is an `import`. Tests
 avoid mocking it altogether by keeping the logic worth testing in `core/`, where
 it takes its input as arguments. `React.createContext` is used only for values
-that are genuinely ambient — today just the mention resolver.
+that are genuinely ambient — today the mention resolver and the attachment
+service, both of which every editor and every rendered comment needs.
 
 **React 16.14.** Hooks yes; `ReactDOM.render` rather than `createRoot`, no
 concurrent features, and much of the React documentation online assumes 18+.

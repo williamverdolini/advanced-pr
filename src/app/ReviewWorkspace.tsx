@@ -17,6 +17,7 @@ import {
 } from "../components/DiffViewer";
 import { FileTree } from "../components/FileTree";
 import { Markdown } from "../components/Markdown";
+import { AttachmentContext } from "../components/attachmentContext";
 import { MentionContext } from "../components/mentionContext";
 import { contentSideForChange, isContentOnlyChange } from "../core/changeType";
 import { fileNameFromPath, nextFileToReview } from "../core/fileTree";
@@ -44,6 +45,7 @@ import { StepActions, type FeedbackScope } from "./StepActions";
 import { StepWizard } from "./StepWizard";
 import { useAsyncResource } from "./useAsyncResource";
 import { useCollapsedThreads } from "./useCollapsedThreads";
+import { useCommentAttachments } from "./useCommentAttachments";
 import { useDiffSelection } from "./useDiffSelection";
 import { useHostPathSync } from "./useHostPathSync";
 import { useInlineDiff } from "./useInlineDiff";
@@ -115,6 +117,15 @@ export function ReviewWorkspace({
     () => ({ repositoryId: workspace.repositoryId, projectId: workspace.projectId }),
     [workspace.repositoryId, workspace.projectId],
   );
+  const attachmentSource = React.useMemo(
+    () => ({
+      id: workspace.id,
+      repositoryId: workspace.repositoryId,
+      projectId: workspace.projectId,
+    }),
+    [workspace.id, workspace.projectId, workspace.repositoryId],
+  );
+  const attachments = useCommentAttachments(attachmentSource);
   const viewedScope = React.useMemo(
     () => ({
       id: workspace.id,
@@ -308,213 +319,215 @@ export function ReviewWorkspace({
 
   return (
     <MentionContext.Provider value={resolveMention}>
-      <section className="workspace-shell">
-        {/* Title, branches and counters live in the Azure DevOps header that
-            embeds this iframe: repeating them here would only cost height. */}
-        <header className="review-header">
-          <div className="review-toolbar">
-            <StepWizard
-              steps={review.displayedSteps}
-              selectedStepId={selectedStep?.stepId}
-              statuses={review.reviewerSteps}
-              decisions={review.stepDecisions}
-              reviewerId={reviewerId}
-              viewedFiles={viewedFiles}
-              onSelect={selectStep}
-            />
-            <StepActions
-              step={selectedStep}
-              status={selectedStepStatus}
-              pending={review.pending}
-              reviewClosed={review.reviewClosed}
-              isAuthor={reviewerId === workspace.authorId}
-              planExists={Boolean(workspace.plan.sourceThreadId)}
-              clearableFeedback={{
-                step: review.reviewersWithFeedback(selectedStep).length > 0,
-                all: review.reviewersWithFeedback().length > 0,
-              }}
-              onDecision={review.decideStep}
-              onTogglePlanEditor={() => setPlanEditorOpen((open) => !open)}
-              onRequestClearFeedback={setClearFeedbackScope}
-            />
-          </div>
-          {planEditorOpen && reviewerId === workspace.authorId && (
-            <PlanEditor
-              value={planDraft}
-              isNewPlan={!workspace.plan.sourceThreadId}
-              pending={review.pending}
-              reviewClosed={review.reviewClosed}
-              onChange={setPlanDraft}
-              onSave={review.createPlan}
-              onCancel={() => setPlanEditorOpen(false)}
-            />
-          )}
-          {review.reviewClosed && (
-            <MessageCard severity={MessageCardSeverity.Info}>
-              This pull request is {workspace.state}. Review actions are disabled; comments stay
-              readable.
-            </MessageCard>
-          )}
-          {!workspace.plan.sourceThreadId && reviewerId !== workspace.authorId && (
-            <MessageCard severity={MessageCardSeverity.Info}>
-              The pull request author must create the plan before step decisions can be recorded.
-            </MessageCard>
-          )}
-        </header>
-        {review.error && (
-          <MessageCard severity={MessageCardSeverity.Error}>{review.error}</MessageCard>
-        )}
-        <Splitter
-          className="review-workspace"
-          ariaLabel="Files splitter"
-          splitterDirection={SplitterDirection.Vertical}
-          fixedElement={SplitterElementPosition.Near}
-          initialFixedSize={initialSplitterWidth}
-          minFixedSize={minSplitterWidth}
-          maxFixedSize={maxSplitterWidth}
-          onFixedSizeChanged={saveSplitterWidth}
-          nearElementClassName="workspace-pane"
-          farElementClassName="workspace-pane"
-          onRenderNearElement={() => (
-            <div className="files-column">
-              {selectedStep?.explanation && (
-                <ExplainPanel
-                  stepTitle={selectedStep.title}
-                  explanation={selectedStep.explanation}
-                  onExpand={() => setExplainExpanded(true)}
-                />
-              )}
-              <Card
-                className="files-pane"
-                titleProps={{
-                  text: `Changed files (${visibleViewedCount}/${visibleFiles.length})`,
-                  size: TitleSize.Medium,
+      <AttachmentContext.Provider value={attachments}>
+        <section className="workspace-shell">
+          {/* Title, branches and counters live in the Azure DevOps header that
+              embeds this iframe: repeating them here would only cost height. */}
+          <header className="review-header">
+            <div className="review-toolbar">
+              <StepWizard
+                steps={review.displayedSteps}
+                selectedStepId={selectedStep?.stepId}
+                statuses={review.reviewerSteps}
+                decisions={review.stepDecisions}
+                reviewerId={reviewerId}
+                viewedFiles={viewedFiles}
+                onSelect={selectStep}
+              />
+              <StepActions
+                step={selectedStep}
+                status={selectedStepStatus}
+                pending={review.pending}
+                reviewClosed={review.reviewClosed}
+                isAuthor={reviewerId === workspace.authorId}
+                planExists={Boolean(workspace.plan.sourceThreadId)}
+                clearableFeedback={{
+                  step: review.reviewersWithFeedback(selectedStep).length > 0,
+                  all: review.reviewersWithFeedback().length > 0,
                 }}
-              >
-                <FileTree
-                  key={selectedStep?.stepId ?? "all-files"}
-                  files={visibleFiles}
-                  viewedFiles={viewedFiles}
-                  selectedFile={selectedFile}
-                  selectedThreadId={selectedThreadId}
-                  threadsByFile={threadsByFile}
-                  relatedFilesByPath={relatedFilesByPath}
-                  onSelectFile={selectFile}
-                  onSelectThread={selectThread}
-                  onSetViewed={setFilesViewed}
-                />
-              </Card>
+                onDecision={review.decideStep}
+                onTogglePlanEditor={() => setPlanEditorOpen((open) => !open)}
+                onRequestClearFeedback={setClearFeedbackScope}
+              />
             </div>
+            {planEditorOpen && reviewerId === workspace.authorId && (
+              <PlanEditor
+                value={planDraft}
+                isNewPlan={!workspace.plan.sourceThreadId}
+                pending={review.pending}
+                reviewClosed={review.reviewClosed}
+                onChange={setPlanDraft}
+                onSave={review.createPlan}
+                onCancel={() => setPlanEditorOpen(false)}
+              />
+            )}
+            {review.reviewClosed && (
+              <MessageCard severity={MessageCardSeverity.Info}>
+                This pull request is {workspace.state}. Review actions are disabled; comments stay
+                readable.
+              </MessageCard>
+            )}
+            {!workspace.plan.sourceThreadId && reviewerId !== workspace.authorId && (
+              <MessageCard severity={MessageCardSeverity.Info}>
+                The pull request author must create the plan before step decisions can be recorded.
+              </MessageCard>
+            )}
+          </header>
+          {review.error && (
+            <MessageCard severity={MessageCardSeverity.Error}>{review.error}</MessageCard>
           )}
-          onRenderFarElement={() => (
-            <Card
-              className="diff-pane"
-              // Name on the title line, folder underneath: the full path of a
-              // deeply nested file would push the commands off the header.
-              titleProps={{
-                text: selectedFile ? fileNameFromPath(selectedFile.path) : "Diff",
-                size: TitleSize.Small,
-                className: "diff-title",
-              }}
-              headerDescriptionProps={
-                selectedFile
-                  ? { text: selectedFile.path, className: "diff-title-path" }
-                  : undefined
-              }
-              headerCommandBarItems={
-                selectedFile
-                  ? buildDiffCommands({
-                      contentOnly,
-                      contentSide,
-                      sideBySide,
-                      differenceCount,
-                      onSideBySideChange: setSideBySide,
-                      onGoToDifference: (direction) =>
-                        diffApiRef.current?.goToDiff(direction),
-                    })
-                  : undefined
-              }
+          <Splitter
+            className="review-workspace"
+            ariaLabel="Files splitter"
+            splitterDirection={SplitterDirection.Vertical}
+            fixedElement={SplitterElementPosition.Near}
+            initialFixedSize={initialSplitterWidth}
+            minFixedSize={minSplitterWidth}
+            maxFixedSize={maxSplitterWidth}
+            onFixedSizeChanged={saveSplitterWidth}
+            nearElementClassName="workspace-pane"
+            farElementClassName="workspace-pane"
+            onRenderNearElement={() => (
+              <div className="files-column">
+                {selectedStep?.explanation && (
+                  <ExplainPanel
+                    stepTitle={selectedStep.title}
+                    explanation={selectedStep.explanation}
+                    onExpand={() => setExplainExpanded(true)}
+                  />
+                )}
+                <Card
+                  className="files-pane"
+                  titleProps={{
+                    text: `Changed files (${visibleViewedCount}/${visibleFiles.length})`,
+                    size: TitleSize.Medium,
+                  }}
+                >
+                  <FileTree
+                    key={selectedStep?.stepId ?? "all-files"}
+                    files={visibleFiles}
+                    viewedFiles={viewedFiles}
+                    selectedFile={selectedFile}
+                    selectedThreadId={selectedThreadId}
+                    threadsByFile={threadsByFile}
+                    relatedFilesByPath={relatedFilesByPath}
+                    onSelectFile={selectFile}
+                    onSelectThread={selectThread}
+                    onSetViewed={setFilesViewed}
+                  />
+                </Card>
+              </div>
+            )}
+            onRenderFarElement={() => (
+              <Card
+                className="diff-pane"
+                // Name on the title line, folder underneath: the full path of a
+                // deeply nested file would push the commands off the header.
+                titleProps={{
+                  text: selectedFile ? fileNameFromPath(selectedFile.path) : "Diff",
+                  size: TitleSize.Small,
+                  className: "diff-title",
+                }}
+                headerDescriptionProps={
+                  selectedFile
+                    ? { text: selectedFile.path, className: "diff-title-path" }
+                    : undefined
+                }
+                headerCommandBarItems={
+                  selectedFile
+                    ? buildDiffCommands({
+                        contentOnly,
+                        contentSide,
+                        sideBySide,
+                        differenceCount,
+                        onSideBySideChange: setSideBySide,
+                        onGoToDifference: (direction) =>
+                          diffApiRef.current?.goToDiff(direction),
+                      })
+                    : undefined
+                }
+              >
+                {!selectedFile && <p className="empty-pane">Select a file to view its diff.</p>}
+                {diffLoading && <Spinner label="Loading file" />}
+                {diffError && (
+                  <MessageCard severity={MessageCardSeverity.Warning}>{diffError}</MessageCard>
+                )}
+                {inlineDiff.hiddenThreadCount > 0 && (
+                  <MessageCard severity={MessageCardSeverity.Info}>
+                    {inlineDiff.hiddenThreadCount} more comments on this file are listed in the tree
+                    but not shown inline.
+                  </MessageCard>
+                )}
+                {selectedFile && diff && (
+                  <DiffViewer
+                    original={diff.original}
+                    modified={diff.modified}
+                    language={diff.language}
+                    filePath={selectedFile.path}
+                    zones={inlineDiff.zones}
+                    renderZone={renderZone}
+                    renderSideBySide={splitView}
+                    singleFile={contentOnly}
+                    singleFileSide={contentSide}
+                    threadDecorations={inlineDiff.threadDecorations}
+                    selectedThreadId={selectedThreadId}
+                    revealTarget={inlineDiff.revealTarget}
+                    onSelectionChange={selection.track}
+                    onSelectThread={toggleThreadFromGlyph}
+                    onRequestComment={requestComment}
+                    apiRef={diffApiRef}
+                    onDiffUpdated={setDifferenceCount}
+                  />
+                )}
+              </Card>
+            )}
+          />
+          {explainExpanded && selectedStep?.explanation && (
+            <Dialog
+              titleProps={{ text: `Explain: ${selectedStep.title}` }}
+              // The point of the dialog is room to read: 800px, narrowing to 80% of
+              // the viewport below 1024px.
+              contentSize={ContentSize.ExtraLarge}
+              onDismiss={() => setExplainExpanded(false)}
+              footerButtonProps={[
+                { text: "Close", primary: true, onClick: () => setExplainExpanded(false) },
+              ]}
             >
-              {!selectedFile && <p className="empty-pane">Select a file to view its diff.</p>}
-              {diffLoading && <Spinner label="Loading file" />}
-              {diffError && (
-                <MessageCard severity={MessageCardSeverity.Warning}>{diffError}</MessageCard>
-              )}
-              {inlineDiff.hiddenThreadCount > 0 && (
-                <MessageCard severity={MessageCardSeverity.Info}>
-                  {inlineDiff.hiddenThreadCount} more comments on this file are listed in the tree
-                  but not shown inline.
-                </MessageCard>
-              )}
-              {selectedFile && diff && (
-                <DiffViewer
-                  original={diff.original}
-                  modified={diff.modified}
-                  language={diff.language}
-                  filePath={selectedFile.path}
-                  zones={inlineDiff.zones}
-                  renderZone={renderZone}
-                  renderSideBySide={splitView}
-                  singleFile={contentOnly}
-                  singleFileSide={contentSide}
-                  threadDecorations={inlineDiff.threadDecorations}
-                  selectedThreadId={selectedThreadId}
-                  revealTarget={inlineDiff.revealTarget}
-                  onSelectionChange={selection.track}
-                  onSelectThread={toggleThreadFromGlyph}
-                  onRequestComment={requestComment}
-                  apiRef={diffApiRef}
-                  onDiffUpdated={setDifferenceCount}
-                />
-              )}
-            </Card>
+              <Markdown className="explain-dialog-body" content={selectedStep.explanation} />
+            </Dialog>
           )}
-        />
-        {explainExpanded && selectedStep?.explanation && (
-          <Dialog
-            titleProps={{ text: `Explain: ${selectedStep.title}` }}
-            // The point of the dialog is room to read: 800px, narrowing to 80% of
-            // the viewport below 1024px.
-            contentSize={ContentSize.ExtraLarge}
-            onDismiss={() => setExplainExpanded(false)}
-            footerButtonProps={[
-              { text: "Close", primary: true, onClick: () => setExplainExpanded(false) },
-            ]}
-          >
-            <Markdown className="explain-dialog-body" content={selectedStep.explanation} />
-          </Dialog>
-        )}
-        {clearFeedbackScope && (
-          <ClearFeedbackDialog
-            scope={clearFeedbackScope}
-            stepTitle={selectedStep?.title}
-            reviewerNames={review
-              .reviewersWithFeedback(clearFeedbackScope === "step" ? selectedStep : undefined)
-              .map((id) => resolveMention(id)?.displayName ?? id)}
-            pending={review.pending}
-            onDismiss={() => setClearFeedbackScope(undefined)}
-            onConfirm={() => {
-              review.clearFeedback(clearFeedbackScope === "step" ? selectedStep : undefined);
-              setClearFeedbackScope(undefined);
-            }}
-          />
-        )}
-        {review.signOffOpen && (
-          <SignOffDialog
-            workspace={workspace}
-            reviewerId={reviewerId}
-            currentVote={review.currentReviewerVote}
-            pending={review.pending}
-            onDismiss={() => review.setSignOffOpen(false)}
-            onConfirm={review.approvePullRequest}
-          />
-        )}
-        {workspace.plan.warnings.length > 0 && (
-          <MessageCard severity={MessageCardSeverity.Warning}>
-            {workspace.plan.warnings.map((warning) => warning.message).join(" ")}
-          </MessageCard>
-        )}
-      </section>
+          {clearFeedbackScope && (
+            <ClearFeedbackDialog
+              scope={clearFeedbackScope}
+              stepTitle={selectedStep?.title}
+              reviewerNames={review
+                .reviewersWithFeedback(clearFeedbackScope === "step" ? selectedStep : undefined)
+                .map((id) => resolveMention(id)?.displayName ?? id)}
+              pending={review.pending}
+              onDismiss={() => setClearFeedbackScope(undefined)}
+              onConfirm={() => {
+                review.clearFeedback(clearFeedbackScope === "step" ? selectedStep : undefined);
+                setClearFeedbackScope(undefined);
+              }}
+            />
+          )}
+          {review.signOffOpen && (
+            <SignOffDialog
+              workspace={workspace}
+              reviewerId={reviewerId}
+              currentVote={review.currentReviewerVote}
+              pending={review.pending}
+              onDismiss={() => review.setSignOffOpen(false)}
+              onConfirm={review.approvePullRequest}
+            />
+          )}
+          {workspace.plan.warnings.length > 0 && (
+            <MessageCard severity={MessageCardSeverity.Warning}>
+              {workspace.plan.warnings.map((warning) => warning.message).join(" ")}
+            </MessageCard>
+          )}
+        </section>
+      </AttachmentContext.Provider>
     </MentionContext.Provider>
   );
 }
