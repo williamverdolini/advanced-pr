@@ -893,7 +893,13 @@ body,
 
 /* Monaco owns the outer node's height; the inner one is measured to drive it. */
 .advanced-pr-zone {
-  width: 100%;
+  /* The width is set on the element by `pinZoneToViewport`: the editor's content
+     area, not the scroll width the zone would otherwise inherit. This caps it
+     from there — prose stops being readable long before a wide screen runs out
+     of room, and the code beside the comment stays visible. Hidden, so a card
+     that cannot shrink any further is clipped rather than pushing the comment
+     out of the visible area. */
+  max-width: 750px;
   overflow: hidden;
   /* `.view-lines` is sized to the whole scroll area and comes after
      `.view-zones` in the DOM, so without a stacking order it paints over the

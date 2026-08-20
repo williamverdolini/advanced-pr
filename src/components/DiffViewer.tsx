@@ -315,9 +315,26 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
         .createDecorationsCollection(target);
     };
 
+    const pinZones = (side: DiffSideKey): void => {
+      const codeEditor = editor.sideEditor(side);
+      for (const mounted of mountedZonesRef.current.values()) {
+        if (mounted.side === side) {
+          pinZoneToViewport(codeEditor, mounted.container);
+        }
+      }
+    };
+
     const subscriptions = sides.flatMap((side) => {
       const codeEditor = editor.sideEditor(side);
       return [
+        codeEditor.onDidScrollChange((event) => {
+          if (event.scrollLeftChanged || event.scrollWidthChanged) {
+            pinZones(side);
+          }
+        }),
+        // The content area changes width on a window resize, on the splitter
+        // being dragged, and on the switch between unified and side by side.
+        codeEditor.onDidLayoutChange(() => pinZones(side)),
         codeEditor.onDidChangeCursorSelection((event) => {
           const selection = mapSelection(side, event.selection);
           callbacksRef.current.onSelectionChange?.(selection);
@@ -491,6 +508,23 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
   );
 }
 
+/**
+ * Keeps a zone inside the visible part of the editor. A view zone is a child of
+ * `.lines-content`, which is as wide as the longest line in the file and is
+ * offset by `left: -scrollLeft`: left alone, the comment is laid out against
+ * that width and slides away with the code, so reading it means scrolling
+ * sideways. Sized to the content area and moved back by the scroll offset, it
+ * always fits and always stays put.
+ */
+function pinZoneToViewport(codeEditor: monaco.editor.ICodeEditor, container: HTMLElement): void {
+  const { contentWidth } = codeEditor.getLayoutInfo();
+  // Zero while the editor has no width of its own yet, and a zone zero pixels
+  // wide would be measured as empty and stay collapsed; the layout change that
+  // gives the editor its width pins it again.
+  container.style.width = contentWidth > 0 ? `${contentWidth}px` : "100%";
+  container.style.transform = `translateX(${codeEditor.getScrollLeft()}px)`;
+}
+
 function createZone(editor: EditorHandle, anchor: DiffZoneAnchor): MountedZone {
   const container = document.createElement("div");
   container.className = "advanced-pr-zone";
@@ -522,6 +556,9 @@ function createZone(editor: EditorHandle, anchor: DiffZoneAnchor): MountedZone {
   editor.sideEditor(anchor.side).changeViewZones((accessor) => {
     zoneId = accessor.addZone(zone);
   });
+  // Before Monaco lays it out: a zone created while the code is scrolled
+  // sideways would otherwise appear off screen for one frame.
+  pinZoneToViewport(editor.sideEditor(anchor.side), container);
 
   const mounted: MountedZone = {
     key: anchor.key,
@@ -572,6 +609,9 @@ function relocateZone(
   editor.sideEditor(anchor.side).changeViewZones((accessor) => {
     mounted.zoneId = accessor.addZone(mounted.zone);
   });
+  // The other side scrolls and lays out on its own, so the pin is not the one
+  // this zone was carrying.
+  pinZoneToViewport(editor.sideEditor(anchor.side), mounted.container);
 }
 
 function createEditorHandle(
