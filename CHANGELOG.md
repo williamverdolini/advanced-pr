@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.6.0
+
+Reading a file with its context.
+
+- **Related files under a file entry.** A bullet indented under another one in the plan names a
+  file worth reading beside it, usually the test that covers it. The row shows a counter that
+  expands into those files; each one opens in the diff, takes comments and carries its own
+  viewed mark, which is the same mark the step listing it shows, so ticking it once is enough.
+  They stay context rather than work: they do not count towards the step's file total, they
+  still land in `Everything else` unless a step lists them on a line of their own, and adding
+  or rewriting them never invalidates an approval already given.
+- **Comment text can be selected** and copied. Monaco marks its own editor unselectable and
+  re-enables it for the code lines alone, which left every comment in the diff impossible to
+  select.
+- **Reply & resolve** in one action, beside `Reply`, on a thread that is still open.
+- Comments and the `Explain` notes are set in **14px** instead of 12px, and the expanded
+  `Explain` dialog in 15px: they are prose, and were being sized like the chrome around them.
+
 ## 0.5.2
 
 - The **decisions icon** on a step turns amber as soon as any reviewer has asked for changes on

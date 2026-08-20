@@ -84,6 +84,132 @@ describe("review plan", () => {
     });
   });
 
+  describe("related files", () => {
+    const marker = { planId: "plan-1", version: 1 };
+
+    it("reads a nested bullet as a file related to the entry above it", () => {
+      const content = [
+        "1. Sort contract",
+        "### Explain",
+        "Start from the extensions.",
+        "",
+        "- src/Search/SortConditions.cs",
+        "  - src/SearchTest/SortConditionsTests.cs",
+        "  - src/SearchTest/SortConditionsMultipleTests.cs",
+        "- src/Search/OmniSearchRequest.cs",
+      ].join("\n");
+
+      const plan = buildStepPlan(
+        content,
+        [
+          "src/Search/SortConditions.cs",
+          "src/Search/OmniSearchRequest.cs",
+          "src/SearchTest/SortConditionsTests.cs",
+          "src/SearchTest/SortConditionsMultipleTests.cs",
+        ],
+        marker,
+      );
+
+      expect(plan.steps[0].files).toEqual([
+        "src/Search/SortConditions.cs",
+        "src/Search/OmniSearchRequest.cs",
+      ]);
+      expect(plan.steps[0].relatedFiles.get("src/Search/SortConditions.cs")).toEqual([
+        "src/SearchTest/SortConditionsTests.cs",
+        "src/SearchTest/SortConditionsMultipleTests.cs",
+      ]);
+      expect(plan.steps[0].explanation).toBe("Start from the extensions.");
+      expect(plan.warnings).toEqual([]);
+    });
+
+    it("leaves a related file in the catch-all, so the step count is unchanged", () => {
+      const plan = buildStepPlan(
+        "1. Core\n- src/core.ts\n  - tests/core.test.ts",
+        ["src/core.ts", "tests/core.test.ts"],
+        marker,
+      );
+
+      expect(plan.steps[0].files).toEqual(["src/core.ts"]);
+      expect(plan.steps.at(-1)?.files).toEqual(["tests/core.test.ts"]);
+    });
+
+    it("keeps a related file that a later step claims for itself", () => {
+      const plan = buildStepPlan(
+        "1. Core\n- src/core.ts\n  - tests/core.test.ts\n\n2. Tests\n- tests/core.test.ts",
+        ["src/core.ts", "tests/core.test.ts"],
+        marker,
+      );
+
+      expect(plan.steps[0].relatedFiles.get("src/core.ts")).toEqual(["tests/core.test.ts"]);
+      expect(plan.steps[1].files).toEqual(["tests/core.test.ts"]);
+      expect(plan.steps.at(-1)?.files).toEqual([]);
+    });
+
+    it("relates the same file to more than one entry", () => {
+      const plan = buildStepPlan(
+        "1. Core\n- src/core.ts\n  - tests/core.test.ts\n- src/rules.ts\n  - tests/core.test.ts",
+        ["src/core.ts", "src/rules.ts", "tests/core.test.ts"],
+        marker,
+      );
+
+      expect(plan.steps[0].relatedFiles.get("src/core.ts")).toEqual(["tests/core.test.ts"]);
+      expect(plan.steps[0].relatedFiles.get("src/rules.ts")).toEqual(["tests/core.test.ts"]);
+    });
+
+    it("warns about a related path that is not in the pull request", () => {
+      const plan = buildStepPlan(
+        "1. Core\n- src/core.ts\n  - tests/gone.test.ts",
+        ["src/core.ts"],
+        marker,
+      );
+
+      expect(plan.steps[0].relatedFiles.size).toBe(0);
+      expect(plan.warnings).toEqual([
+        {
+          kind: "stale-entry",
+          path: "tests/gone.test.ts",
+          message:
+            "'tests/gone.test.ts', listed under 'src/core.ts', is not part of the current pull request.",
+        },
+      ]);
+    });
+
+    it("drops a repeated entry and the parent listed under itself", () => {
+      const plan = buildStepPlan(
+        "1. Core\n- src/core.ts\n  - tests/core.test.ts\n  - `tests/core.test.ts`\n  - src/core.ts",
+        ["src/core.ts", "tests/core.test.ts"],
+        marker,
+      );
+
+      expect(plan.steps[0].relatedFiles.get("src/core.ts")).toEqual(["tests/core.test.ts"]);
+      expect(plan.warnings).toEqual([]);
+    });
+
+    it("reads the whole list as entries when it is indented as a block", () => {
+      const plan = buildStepPlan(
+        "1. Core\n  - src/core.ts\n  - src/rules.ts",
+        ["src/core.ts", "src/rules.ts"],
+        marker,
+      );
+
+      expect(plan.steps[0].files).toEqual(["src/core.ts", "src/rules.ts"]);
+      expect(plan.steps[0].relatedFiles.size).toBe(0);
+    });
+
+    it("leaves the plan hash and the step fingerprint untouched", () => {
+      const without = buildStepPlan("1. Core\n- src/core.ts", ["src/core.ts", "tests/core.test.ts"], marker);
+      const withRelated = buildStepPlan(
+        "1. Core\n- src/core.ts\n  - tests/core.test.ts",
+        ["src/core.ts", "tests/core.test.ts"],
+        marker,
+      );
+
+      expect(withRelated.planHash).toBe(without.planHash);
+      expect(withRelated.steps[0].fingerprint).toBe(without.steps[0].fingerprint);
+      expect(withRelated.steps.at(-1)?.fingerprint).toBe(without.steps.at(-1)?.fingerprint);
+    });
+  });
+
   it("finds the step a file belongs to, including the catch-all", () => {
     const plan = buildStepPlan(
       "1. Core\n- src/core.ts",

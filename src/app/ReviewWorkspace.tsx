@@ -19,7 +19,7 @@ import { FileTree } from "../components/FileTree";
 import { Markdown } from "../components/Markdown";
 import { MentionContext } from "../components/mentionContext";
 import { contentSideForChange, isContentOnlyChange } from "../core/changeType";
-import { nextFileToReview } from "../core/fileTree";
+import { fileNameFromPath, nextFileToReview } from "../core/fileTree";
 import type { InlineZoneDescriptor } from "../core/inlineZones";
 import type { ReviewStep } from "../core/reviewPlan";
 import { maxSplitterWidth, minSplitterWidth } from "../core/splitterWidth";
@@ -133,6 +133,22 @@ export function ReviewWorkspace({
         : workspace.files,
     [selectedStep, workspace.files],
   );
+  // The plan names related files by path; the tree needs the changed file behind
+  // each one, and only for the step on screen.
+  const relatedFilesByPath = React.useMemo(() => {
+    const byPath = new Map(workspace.files.map((file) => [file.path, file]));
+    const links = new Map<string, readonly ChangedFile[]>();
+    for (const [path, related] of selectedStep?.relatedFiles ?? []) {
+      const files = related
+        .map((relatedPath) => byPath.get(relatedPath))
+        .filter((file): file is ChangedFile => Boolean(file));
+      if (files.length > 0) {
+        links.set(path, files);
+      }
+    }
+
+    return links;
+  }, [selectedStep, workspace.files]);
   const fileThreads = React.useMemo(
     () => (selectedFile ? threadsByFile.get(selectedFile.path) ?? [] : []),
     [selectedFile, threadsByFile],
@@ -375,6 +391,7 @@ export function ReviewWorkspace({
                   selectedFile={selectedFile}
                   selectedThreadId={selectedThreadId}
                   threadsByFile={threadsByFile}
+                  relatedFilesByPath={relatedFilesByPath}
                   onSelectFile={selectFile}
                   onSelectThread={selectThread}
                   onSetViewed={setFilesViewed}
@@ -388,7 +405,7 @@ export function ReviewWorkspace({
               // Name on the title line, folder underneath: the full path of a
               // deeply nested file would push the commands off the header.
               titleProps={{
-                text: selectedFile ? fileName(selectedFile.path) : "Diff",
+                text: selectedFile ? fileNameFromPath(selectedFile.path) : "Diff",
                 size: TitleSize.Small,
                 className: "diff-title",
               }}
@@ -478,9 +495,4 @@ export function ReviewWorkspace({
       </section>
     </MentionContext.Provider>
   );
-}
-
-/** The last segment of a repository path. */
-function fileName(path: string): string {
-  return path.slice(path.lastIndexOf("/") + 1);
 }

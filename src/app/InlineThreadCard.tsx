@@ -51,6 +51,18 @@ export function InlineThreadCard({
       await onRefresh();
     });
 
+  // The reply is written first and the thread closed after it, so a failure on
+  // the second call leaves the comment posted rather than losing what was typed.
+  const submitReply = (thenToggleState: boolean): Promise<void> =>
+    runAndRefresh(async () => {
+      await replyToThread(workspace, thread.id, replyText.trim());
+      if (thenToggleState) {
+        await setThreadResolved(workspace, thread.id, thread.isOpen);
+      }
+      setReplyText("");
+      setReplyOpen(false);
+    });
+
   const anchorLabel = thread.position
     ? `${thread.position.side === "left" ? "Base" : "Changed"} · line ${thread.position.startLine}`
     : "File comment";
@@ -123,51 +135,56 @@ export function InlineThreadCard({
         ))}
       </div>
       {error && <p className="inline-thread-error">{error}</p>}
-      <div className="inline-thread-actions">
-        <Button text="Reply" disabled={pending} onClick={() => setReplyOpen((open) => !open)} />
-        <Button
-          text={thread.isOpen ? "Resolve" : "Reopen"}
-          primary={thread.isOpen}
-          disabled={pending}
-          onClick={() =>
-            void runAndRefresh(() => setThreadResolved(workspace, thread.id, thread.isOpen))
-          }
-        />
-        {rootComment && (
+      {/* Hidden while the composer is open: it offers the same actions, and a
+          row kept here would cost the view zone height for nothing. */}
+      {!replyOpen && (
+        <div className="inline-thread-actions">
+          <Button text="Reply" disabled={pending} onClick={() => setReplyOpen((open) => !open)} />
           <Button
-            subtle
-            iconProps={{ iconName: likedByMe ? "LikeSolid" : "Like" }}
-            ariaLabel={`${likedByMe ? "Remove like" : "Like"}, ${rootComment.likeCount} so far`}
-            tooltipProps={{
-              text: `${likedByMe ? "Remove like" : "Like"} (${rootComment.likeCount})`,
-            }}
+            text={thread.isOpen ? "Resolve" : "Reopen"}
+            primary={thread.isOpen}
             disabled={pending}
             onClick={() =>
-              void runAndRefresh(() =>
-                setCommentLiked(workspace, thread.id, rootComment.id, !likedByMe),
-              )
+              void runAndRefresh(() => setThreadResolved(workspace, thread.id, thread.isOpen))
             }
           />
-        )}
-      </div>
+          {rootComment && (
+            <Button
+              subtle
+              iconProps={{ iconName: likedByMe ? "LikeSolid" : "Like" }}
+              ariaLabel={`${likedByMe ? "Remove like" : "Like"}, ${rootComment.likeCount} so far`}
+              tooltipProps={{
+                text: `${likedByMe ? "Remove like" : "Like"} (${rootComment.likeCount})`,
+              }}
+              disabled={pending}
+              onClick={() =>
+                void runAndRefresh(() =>
+                  setCommentLiked(workspace, thread.id, rootComment.id, !likedByMe),
+                )
+              }
+            />
+          )}
+        </div>
+      )}
       {replyOpen && (
         <MarkdownCommentEditor
           value={replyText}
           disabled={pending}
           submitLabel="Reply"
           placeholder="Write a reply"
+          // Resolving is offered beside the reply, not instead of it: the last
+          // word on a discussion and closing it are usually the same intent,
+          // and doing it in two round-trips means two refreshes.
+          secondaryAction={{
+            label: thread.isOpen ? "Reply & resolve" : "Reply & reopen",
+            onClick: () => void submitReply(true),
+          }}
           onChange={setReplyText}
           onCancel={() => {
             setReplyOpen(false);
             setReplyText("");
           }}
-          onSubmit={() =>
-            void runAndRefresh(async () => {
-              await replyToThread(workspace, thread.id, replyText.trim());
-              setReplyText("");
-              setReplyOpen(false);
-            })
-          }
+          onSubmit={() => void submitReply(false)}
         />
       )}
     </article>

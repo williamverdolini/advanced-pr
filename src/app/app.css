@@ -370,6 +370,9 @@ body,
   max-height: 60vh;
   padding: 4px 2px;
   overflow: auto;
+  /* The dialog is opened for room to read, so it goes one step further than
+     the panel it was opened from. */
+  font-size: 0.9375rem;
 }
 
 .explain-step {
@@ -383,7 +386,6 @@ body,
 
 .explain-body {
   padding: 0 10px 8px;
-  font-size: 0.75rem;
 }
 
 .files-pane,
@@ -467,6 +469,15 @@ body,
   background-color: var(--component-grid-selected-row-color, rgba(222, 236, 249, 1));
 }
 
+/* The two badges share the row's last column, so a file with both keeps one
+   line and the counters stay in the same order on every row. */
+.file-tree-badges {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
 .file-thread-count {
   min-width: 18px;
   padding: 1px 5px;
@@ -475,6 +486,60 @@ body,
   background: rgba(var(--palette-neutral-8, 234, 234, 234), 1);
   font-size: 0.625rem;
   text-align: center;
+}
+
+/* Reads as the thread counter's sibling, with a link glyph to say what it
+   counts: files worth reading beside this one, not files of the step. */
+.file-related-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 5px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  background: rgba(var(--palette-neutral-8, 234, 234, 234), 1);
+  font: inherit;
+  font-size: 0.625rem;
+  cursor: pointer;
+}
+
+.file-related-toggle:hover,
+.file-related-toggle:focus-visible {
+  color: var(--communication-foreground, #0078d4);
+}
+
+.file-related-toggle.expanded {
+  color: var(--communication-foreground, #0078d4);
+  background: rgba(var(--palette-primary-tint-40, 199, 224, 244), 1);
+}
+
+.file-related-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.file-related-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  width: 100%;
+  min-height: 28px;
+  /* Dashed, and only on the left, to say the row hangs off the file above it
+     rather than being one more file of the step. */
+  border-left: 2px solid transparent;
+  border-bottom: 1px dashed rgba(var(--palette-neutral-8, 234, 234, 234), 1);
+  font-size: 0.875rem;
+}
+
+.file-related-row:hover {
+  background: rgba(var(--palette-neutral-4, 244, 244, 244), 1);
+}
+
+.file-related-row.selected {
+  border-left-color: var(--component-grid-focus-border-color, rgba(0, 120, 212, 1));
+  background-color: var(--component-grid-selected-row-color, rgba(222, 236, 249, 1));
 }
 
 .file-thread-list {
@@ -844,6 +909,13 @@ body,
   /* Transparent so the strip around the card keeps the editor's own
      background, which comes from the Monaco theme, not from the host page. */
   background: transparent;
+  /* Monaco puts `user-select: none` on `.lines-content` and re-enables it for
+     its own view lines only, so a view zone inherits "not selectable" and
+     comment text cannot be copied. Stated here, an inherited value loses.
+     Selecting works from there on because the zone is created with
+     `suppressMouseDown: false`, which leaves the mouse down to the browser. */
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .inline-zone-stack {
@@ -906,16 +978,20 @@ body,
   align-items: baseline;
   gap: 8px;
   color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
 }
 
 .inline-comment-meta strong {
   color: var(--text-primary-color, rgba(0, 0, 0, 0.9));
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
 }
 
+/* Prose, unlike a row of a list, is read rather than scanned: it gets a size of
+   its own instead of the 0.75rem the extension uses for its chrome. */
 .markdown-body {
   overflow-wrap: anywhere;
+  font-size: 0.875rem;
+  line-height: 1.5;
 }
 
 .markdown-body > :first-child {
@@ -944,7 +1020,7 @@ body,
 .markdown-body h5,
 .markdown-body h6 {
   margin: 6px 0 3px;
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
 }
 
 .markdown-body code {
@@ -952,7 +1028,9 @@ body,
   border-radius: 2px;
   background: rgba(var(--palette-neutral-8, 234, 234, 234), 1);
   font-family: "Cascadia Mono", Menlo, Consolas, "Courier New", monospace;
-  font-size: 0.75rem;
+  /* Monospace reads larger at the same size, so it sits just under the prose
+     around it instead of matching it. */
+  font-size: 0.8125rem;
 }
 
 .markdown-body pre {

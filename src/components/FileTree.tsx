@@ -1,16 +1,20 @@
 import * as React from "react";
 import { Button } from "azure-devops-ui/Button";
 import { Checkbox, TriStateCheckbox } from "azure-devops-ui/Checkbox";
+import { Icon, IconSize } from "azure-devops-ui/Icon";
 import { changeKindLabels, type FileChangeKind } from "../core/changeType";
 import { toPlainText } from "../core/markdown";
 import {
   buildFileTree,
   collectFolderPaths,
+  fileNameFromPath,
   type FileTreeNode,
 } from "../core/fileTree";
 import { toggleMember } from "../core/toggleSet";
 import type { ChangedFile, ReviewThread } from "../platform/azureDevOpsClient";
 import { MentionContext } from "./mentionContext";
+
+const noRelatedFiles: ReadonlyMap<string, readonly ChangedFile[]> = new Map();
 
 export interface FileTreeProps {
   files: readonly ChangedFile[];
@@ -18,6 +22,11 @@ export interface FileTreeProps {
   selectedFile?: ChangedFile;
   selectedThreadId?: number;
   threadsByFile: ReadonlyMap<string, readonly ReviewThread[]>;
+  /**
+   * Files to offer under a row, keyed by the path they hang from. They are shown
+   * as context, so they are not part of `files` and never counted with them.
+   */
+  relatedFilesByPath?: ReadonlyMap<string, readonly ChangedFile[]>;
   onSelectFile: (file: ChangedFile) => void;
   onSelectThread: (file: ChangedFile, thread: ReviewThread) => void;
   onSetViewed: (paths: readonly string[], viewed: boolean) => void;
@@ -29,6 +38,7 @@ export function FileTree({
   selectedFile,
   selectedThreadId,
   threadsByFile,
+  relatedFilesByPath = noRelatedFiles,
   onSelectFile,
   onSelectThread,
   onSetViewed,
@@ -37,9 +47,18 @@ export function FileTree({
   const [expandedFolders, setExpandedFolders] = React.useState<ReadonlySet<string>>(
     () => new Set(collectFolderPaths(nodes)),
   );
+  // Collapsed to start with: the related files are an offer, and expanding them
+  // all would undo the point of a step that lists only what has to be read.
+  const [expandedRelated, setExpandedRelated] = React.useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
 
   const toggleFolder = (path: string): void => {
     setExpandedFolders((current) => toggleMember(current, path));
+  };
+
+  const toggleRelated = (path: string): void => {
+    setExpandedRelated((current) => toggleMember(current, path));
   };
 
   return (
@@ -52,14 +71,17 @@ export function FileTree({
         nodes={nodes}
         level={1}
         expandedFolders={expandedFolders}
+        expandedRelated={expandedRelated}
         viewedFiles={viewedFiles}
         selectedFile={selectedFile}
         selectedThreadId={selectedThreadId}
         threadsByFile={threadsByFile}
+        relatedFilesByPath={relatedFilesByPath}
         onSelectFile={onSelectFile}
         onSelectThread={onSelectThread}
         onSetViewed={onSetViewed}
         onToggleFolder={toggleFolder}
+        onToggleRelated={toggleRelated}
       />
     </ul>
   );
@@ -88,28 +110,34 @@ interface TreeNodesProps {
   nodes: readonly FileTreeNode<ChangedFile>[];
   level: number;
   expandedFolders: ReadonlySet<string>;
+  expandedRelated: ReadonlySet<string>;
   viewedFiles: ReadonlySet<string>;
   selectedFile?: ChangedFile;
   selectedThreadId?: number;
   threadsByFile: ReadonlyMap<string, readonly ReviewThread[]>;
+  relatedFilesByPath: ReadonlyMap<string, readonly ChangedFile[]>;
   onSelectFile: (file: ChangedFile) => void;
   onSelectThread: (file: ChangedFile, thread: ReviewThread) => void;
   onSetViewed: (paths: readonly string[], viewed: boolean) => void;
   onToggleFolder: (path: string) => void;
+  onToggleRelated: (path: string) => void;
 }
 
 function TreeNodes({
   nodes,
   level,
   expandedFolders,
+  expandedRelated,
   viewedFiles,
   selectedFile,
   selectedThreadId,
   threadsByFile,
+  relatedFilesByPath,
   onSelectFile,
   onSelectThread,
   onSetViewed,
   onToggleFolder,
+  onToggleRelated,
 }: TreeNodesProps): React.ReactElement {
   const resolveMention = React.useContext(MentionContext);
 
@@ -118,6 +146,8 @@ function TreeNodes({
       {nodes.map((node) => {
         if (node.kind === "file") {
           const fileThreads = threadsByFile.get(node.path) ?? [];
+          const related = relatedFilesByPath.get(node.path) ?? [];
+          const relatedExpanded = expandedRelated.has(node.path);
           return (
             <li
               className="file-tree-item"
@@ -156,12 +186,73 @@ function TreeNodes({
                     {node.name}
                   </span>
                 </button>
-                {fileThreads.length > 0 && (
-                  <span className="file-thread-count" title={`${fileThreads.length} comments`}>
-                    {fileThreads.length}
-                  </span>
-                )}
+                <span className="file-tree-badges">
+                  {related.length > 0 && (
+                    <button
+                      type="button"
+                      className={
+                        relatedExpanded
+                          ? "file-related-toggle expanded"
+                          : "file-related-toggle"
+                      }
+                      aria-expanded={relatedExpanded}
+                      title={`${related.length} related ${
+                        related.length === 1 ? "file" : "files"
+                      }: ${related.map((file) => fileNameFromPath(file.path)).join(", ")}`}
+                      onClick={() => onToggleRelated(node.path)}
+                    >
+                      <Icon iconName="Link" size={IconSize.small} />
+                      {related.length}
+                    </button>
+                  )}
+                  {fileThreads.length > 0 && (
+                    <span className="file-thread-count" title={`${fileThreads.length} comments`}>
+                      {fileThreads.length}
+                    </span>
+                  )}
+                </span>
               </div>
+              {relatedExpanded && (
+                <ul className="file-related-list" role="group">
+                  {related.map((file) => (
+                    <li key={file.path} role="treeitem" aria-level={level + 1}>
+                      <div
+                        className={
+                          selectedFile?.path === file.path
+                            ? "file-related-row selected"
+                            : "file-related-row"
+                        }
+                        style={{ paddingLeft: `${(level - 1) * 14 + 40}px` }}
+                      >
+                        <Checkbox
+                          ariaLabel={`Mark ${file.path} as viewed`}
+                          checked={viewedFiles.has(file.path)}
+                          onChange={(_event, checked) => onSetViewed([file.path], checked)}
+                        />
+                        <button
+                          type="button"
+                          className="file-tree-file"
+                          // The name alone, because the point of the row is what
+                          // it relates to; the path is on the tooltip.
+                          title={`${changeKindLabels[file.changeKind]} · ${file.path}`}
+                          onClick={() => onSelectFile(file)}
+                        >
+                          <ChangeKindBadge kind={file.changeKind} />
+                          <span
+                            className={
+                              file.changeKind === "delete"
+                                ? "file-tree-name deleted"
+                                : "file-tree-name"
+                            }
+                          >
+                            {fileNameFromPath(file.path)}
+                          </span>
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
               {fileThreads.length > 0 && (
                 <ul className="file-thread-list" role="group">
                   {fileThreads.map((thread) => {
@@ -245,14 +336,17 @@ function TreeNodes({
                   nodes={node.children}
                   level={level + 1}
                   expandedFolders={expandedFolders}
+                  expandedRelated={expandedRelated}
                   viewedFiles={viewedFiles}
                   selectedFile={selectedFile}
                   selectedThreadId={selectedThreadId}
                   threadsByFile={threadsByFile}
+                  relatedFilesByPath={relatedFilesByPath}
                   onSelectFile={onSelectFile}
                   onSelectThread={onSelectThread}
                   onSetViewed={onSetViewed}
                   onToggleFolder={onToggleFolder}
+                  onToggleRelated={onToggleRelated}
                 />
               </ul>
             )}

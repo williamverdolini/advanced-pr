@@ -3,6 +3,7 @@ import {
   buildFileTree,
   collectFiles,
   collectFolderPaths,
+  fileNameFromPath,
   nextFileToReview,
 } from "../src/core/fileTree";
 import type { ChangedFile } from "../src/platform/azureDevOpsClient";
@@ -64,6 +65,11 @@ describe("file tree", () => {
     expect(
       nextFileToReview(files, new Set(["src/alpha.ts", "src/zeta.ts"]))?.path,
     ).toBe("README.md");
+  });
+
+  it("takes the file name off a path, with or without folders", () => {
+    expect(fileNameFromPath("src/core/fileTree.ts")).toBe("fileTree.ts");
+    expect(fileNameFromPath("README.md")).toBe("README.md");
   });
 
   it("falls back to the first file when everything has been viewed", () => {

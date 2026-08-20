@@ -16,6 +16,11 @@ export interface MarkdownCommentEditorProps {
   disabled: boolean;
   submitLabel: string;
   placeholder: string;
+  /**
+   * A second way to submit the same text, beside the primary one: replying and
+   * resolving in one go, typically. Hidden when absent.
+   */
+  secondaryAction?: { label: string; onClick: () => void };
   onChange: (value: string) => void;
   onSubmit: () => void;
   onCancel?: () => void;
@@ -50,6 +55,7 @@ export function MarkdownCommentEditor({
   disabled,
   submitLabel,
   placeholder,
+  secondaryAction,
   onChange,
   onSubmit,
   onCancel,
@@ -149,6 +155,13 @@ export function MarkdownCommentEditor({
       )}
       <div className="markdown-actions">
         <Button text={submitLabel} primary disabled={disabled || !value.trim()} onClick={onSubmit} />
+        {secondaryAction && (
+          <Button
+            text={secondaryAction.label}
+            disabled={disabled || !value.trim()}
+            onClick={secondaryAction.onClick}
+          />
+        )}
         {onCancel && <Button text="Cancel" disabled={disabled} onClick={onCancel} />}
       </div>
     </div>

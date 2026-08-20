@@ -12,6 +12,16 @@ export interface ReviewStep {
   title: string;
   isCatchAll: boolean;
   files: string[];
+  /**
+   * The files nested under a file entry in the plan, keyed by the path they hang
+   * from — a test alongside the class it exercises, typically. Context for
+   * reading the step, not work belonging to it: a related path is never claimed
+   * by the step, so it does not count towards its file total and still lands in
+   * the catch-all unless some step lists it on its own line. Like
+   * `explanation`, it stays out of the canonical structure, so adding one never
+   * invalidates an approval.
+   */
+  relatedFiles: ReadonlyMap<string, readonly string[]>;
   fingerprint: string;
   /**
    * Optional notes the author wrote under an `### Explain` heading. Descriptive
@@ -43,9 +53,14 @@ export interface StepPlan {
   planHash: string;
 }
 
+interface ParsedFileEntry {
+  path: string;
+  related: string[];
+}
+
 interface ParsedSection {
   title: string;
-  files: string[];
+  files: ParsedFileEntry[];
   explanation: string[];
 }
 
@@ -113,8 +128,9 @@ export function buildStepPlan(
     seenTitles.add(titleKey);
 
     const files: string[] = [];
-    for (const rawPath of section.files) {
-      const normalized = normalizeRepositoryPath(rawPath);
+    const relatedFiles = new Map<string, readonly string[]>();
+    for (const entry of section.files) {
+      const normalized = normalizeRepositoryPath(entry.path);
       const pathKey = normalized.toLocaleLowerCase();
       if (assigned.has(pathKey)) {
         warnings.push({
@@ -137,30 +153,47 @@ export function buildStepPlan(
 
       assigned.add(pathKey);
       files.push(changedPath);
+
+      const related = resolveRelatedFiles(entry.related, changedPath, changedByKey, warnings);
+      if (related.length > 0) {
+        relatedFiles.set(changedPath, related);
+      }
     }
 
     steps.push(
-      createStep(
-        section.title,
+      createStep({
+        title: section.title,
         order,
-        false,
+        isCatchAll: false,
         files,
-        joinExplanation(section.explanation),
-      ),
+        relatedFiles,
+        explanation: joinExplanation(section.explanation),
+      }),
     );
   }
 
   const catchAllFiles = [...changedByKey.entries()]
     .filter(([key]) => !assigned.has(key))
     .map(([, path]) => path);
-  steps.push(createStep("Everything else", steps.length, true, catchAllFiles));
+  steps.push(
+    createStep({
+      title: "Everything else",
+      order: steps.length,
+      isCatchAll: true,
+      files: catchAllFiles,
+    }),
+  );
 
   const canonical = [
     ...sections.map((section, order) => ({
       order,
       title: section.title,
       isCatchAll: false,
-      files: section.files.map(normalizeRepositoryPath).sort(compareText),
+      // Only the file entries themselves: what is nested under them is context,
+      // and rewriting it must not invalidate an approval.
+      files: section.files
+        .map((entry) => normalizeRepositoryPath(entry.path))
+        .sort(compareText),
     })),
     {
       order: sections.length,
@@ -187,6 +220,9 @@ function parseSections(content: string): ParsedSection[] {
   const sections: ParsedSection[] = [];
   let current: ParsedSection | undefined;
   let inExplain = false;
+  // The indentation the current section's file entries sit at, learnt from its
+  // first bullet: everything deeper than that hangs from the entry above it.
+  let entryIndent: number | undefined;
 
   for (const rawLine of content.split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -204,15 +240,24 @@ function parseSections(content: string): ParsedSection[] {
       current = { title: heading.trim(), files: [], explanation: [] };
       sections.push(current);
       inExplain = false;
+      entryIndent = undefined;
       continue;
     }
 
     // Inside an explanation an indented bullet stays prose: it is the escape
     // hatch for writing a list without its items being read as file entries.
-    const isIndented = /^\s/.test(rawLine);
+    const indent = rawLine.length - rawLine.trimStart().length;
     const bullet = line.match(/^[-*+]\s+(.+)$/);
-    if (current && bullet && !(inExplain && isIndented)) {
-      current.files.push(bullet[1]);
+    if (current && bullet && !(inExplain && indent > 0)) {
+      const parent = current.files.at(-1);
+      if (parent && entryIndent !== undefined && indent > entryIndent) {
+        parent.related.push(bullet[1]);
+      } else {
+        // Tolerant of a list indented as a whole: the shallowest bullet seen so
+        // far is what counts as an entry, not column zero.
+        entryIndent = entryIndent === undefined ? indent : Math.min(entryIndent, indent);
+        current.files.push({ path: bullet[1], related: [] });
+      }
       inExplain = false;
       continue;
     }
@@ -230,13 +275,61 @@ function joinExplanation(lines: readonly string[]): string | undefined {
   return text || undefined;
 }
 
-function createStep(
-  title: string,
-  order: number,
-  isCatchAll: boolean,
-  files: string[],
-  explanation?: string,
-): ReviewStep {
+const noRelatedFiles: ReadonlyMap<string, readonly string[]> = new Map();
+
+/**
+ * The files nested under an entry, resolved against the pull request. Duplicates
+ * and the parent itself are dropped, and nothing here is marked as assigned:
+ * that is what keeps a related path out of the step's own file count.
+ */
+function resolveRelatedFiles(
+  rawPaths: readonly string[],
+  parentPath: string,
+  changedByKey: ReadonlyMap<string, string>,
+  warnings: PlanWarning[],
+): string[] {
+  const related: string[] = [];
+  const seen = new Set<string>([parentPath.toLocaleLowerCase()]);
+
+  for (const rawPath of rawPaths) {
+    const normalized = normalizeRepositoryPath(rawPath);
+    const key = normalized.toLocaleLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+
+    const changedPath = changedByKey.get(key);
+    if (!changedPath) {
+      warnings.push({
+        kind: "stale-entry",
+        path: normalized,
+        message: `'${normalized}', listed under '${parentPath}', is not part of the current pull request.`,
+      });
+      continue;
+    }
+
+    related.push(changedPath);
+  }
+
+  return related;
+}
+
+function createStep({
+  title,
+  order,
+  isCatchAll,
+  files,
+  relatedFiles = noRelatedFiles,
+  explanation,
+}: {
+  title: string;
+  order: number;
+  isCatchAll: boolean;
+  files: string[];
+  relatedFiles?: ReadonlyMap<string, readonly string[]>;
+  explanation?: string;
+}): ReviewStep {
   const sortedFiles = [...files].sort(compareText);
   return {
     stepId: `step-${stableHash(`${order}:${title}`)}`,
@@ -244,7 +337,9 @@ function createStep(
     title,
     isCatchAll,
     files,
-    // Only the files take part: the explanation must not invalidate approvals.
+    relatedFiles,
+    // Only the files take part: neither the explanation nor the related files
+    // must invalidate approvals.
     fingerprint: stableHash(JSON.stringify(sortedFiles)),
     explanation,
   };

@@ -32,12 +32,12 @@ except `hash.ts` (asserted through `reviewPlan`'s tests, which depend on it).
 
 | Module | Concern |
 |---|---|
-| `reviewPlan.ts` | Parses the plan comment into steps; computes `planHash` and per-step `fingerprint` |
+| `reviewPlan.ts` | Parses the plan comment into steps and their related files; computes `planHash` and per-step `fingerprint` |
 | `ledger.ts` | Formats and parses review events; `reduceReviewEvents` rebuilds review state; sign-off eligibility |
 | `inlineZones.ts` | Decides which threads get an inline zone in the diff, and where |
 | `markdown.ts` | The Markdown subset used in comments: parse, plain-text projection, mention extraction |
 | `mentionQuery.ts`, `mentionText.ts` | Typeahead query detection; conversion between stored `@<id>` tokens and display text |
-| `fileTree.ts` | Flat paths to a folder tree |
+| `fileTree.ts` | Flat paths to a folder tree; the file name of a path |
 | `threadIndex.ts` | Threads grouped by file, ordered by line |
 | `changeType.ts` | Azure DevOps change bitmask to `add`/`edit`/`delete`/`rename`, and which diff side to show |
 | `viewedFiles.ts` | Reconciles viewed marks against blob revisions, so a new push clears the stale ones |

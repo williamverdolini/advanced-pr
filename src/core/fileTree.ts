@@ -91,6 +91,11 @@ export function collectFolderPaths<TFile extends { path: string }>(
   );
 }
 
+/** The last segment of a repository path: the file name, without its folders. */
+export function fileNameFromPath(path: string): string {
+  return path.slice(path.lastIndexOf("/") + 1);
+}
+
 function materializeChildren<TFile extends { path: string }>(
   folder: MutableFolder<TFile>,
 ): FileTreeNode<TFile>[] {

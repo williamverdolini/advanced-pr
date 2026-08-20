@@ -25,6 +25,7 @@ Instead of one long list of changed files, the reviewer works through one step a
 ### Explain
 Start from `engine.ts`: everything else follows from it.
 - src/core/engine.ts
+  - tests/engine.test.ts
 - src/core/rules.ts
 
 2. Tests
@@ -32,6 +33,8 @@ Start from `engine.ts`: everything else follows from it.
 ```
 
 The `### Explain` block is optional and purely descriptive: it is shown above the file list, and editing it never invalidates approvals already given.
+
+**Related files hang off a file entry.** A bullet indented under another one is a file worth reading *beside* it, typically the test that covers it: the row shows a counter that expands into the related files, each of them openable, commentable and markable as viewed like any other. They are context, not work, so they never count towards the step's file total, and a related file still lands in `Everything else` unless some step lists it on a line of its own. Adding or rewriting them never invalidates an approval, for the same reason `### Explain` does not.
 
 **Puts comments inside the diff.** Threads render under the line they refer to, with reply, edit, like and resolve in place. Markdown is rendered, with a live preview while writing, and the comment icon in the margin opens and closes each thread. The file tree lists threads under their file, so the same selection drives the tree, the margin and the editor.
 

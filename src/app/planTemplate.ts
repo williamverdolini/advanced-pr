@@ -13,7 +13,12 @@ export function createPlanTemplate(workspace: PullRequestWorkspace): string {
       .flatMap((step, index) => [
         `${index + 1}. ${step.title}`,
         ...(step.explanation ? ["### Explain", step.explanation, ""] : []),
-        ...step.files.map((file) => `- ${file}`),
+        ...step.files.flatMap((file) => [
+          `- ${file}`,
+          // Two spaces is what the parser reads back as "related to the entry
+          // above", so the editor hands the author their own nesting again.
+          ...(step.relatedFiles.get(file) ?? []).map((related) => `  - ${related}`),
+        ]),
         "",
       ])
       .join("\n")
