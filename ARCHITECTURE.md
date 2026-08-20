@@ -32,8 +32,8 @@ except `hash.ts` (asserted through `reviewPlan`'s tests, which depend on it).
 
 | Module | Concern |
 |---|---|
-| `reviewPlan.ts` | Parses the plan comment into steps and their related files; computes `planHash` and per-step `fingerprint` |
-| `ledger.ts` | Formats and parses review events; `reduceReviewEvents` rebuilds review state; sign-off eligibility |
+| `reviewPlan.ts` | Parses the plan comment into steps and their related files; step identity and the invalidation rule; computes `planHash` and per-step `fingerprint` |
+| `ledger.ts` | Formats and parses review events; `reduceReviewEvents` rebuilds review state, and decides which events still count; sign-off eligibility |
 | `inlineZones.ts` | Decides which threads get an inline zone in the diff, and where |
 | `markdown.ts` | The Markdown subset used in comments: parse, plain-text projection, mention extraction |
 | `mentionQuery.ts`, `mentionText.ts` | Typeahead query detection; conversion between stored `@<id>` tokens and display text |
@@ -69,8 +69,9 @@ injection* below).
 `App.tsx` owns the session and the one fetch it depends on; `ReviewWorkspace.tsx`
 is the container that wires the review together, and everything it renders sits
 beside it: `StepWizard`, `StepActions`, `PlanEditor`, `ExplainPanel`,
-`DiffLayoutSwitch`, `InlineThreadCard`, `InlineComposer`, `SignOffDialog`, plus
-`diffCommands.tsx` (the card header commands) and `planTemplate.ts`.
+`DiffLayoutSwitch`, `DiffNavigation`, `StepDecisions`, `InlineThreadCard`,
+`InlineComposer`, `SignOffDialog`, `ClearFeedbackDialog`, plus `diffCommands.tsx`
+(the card header commands), `planTemplate.ts` and `formatDate.ts`.
 
 Each self-contained piece of behaviour is a hook, which is this project's answer
 to "a service per concern":
@@ -79,7 +80,7 @@ to "a service per concern":
 |---|---|
 | `useAsyncResource` | A load, its `loading`/`error`, and discarding a stale response |
 | `usePendingAction` | A write, its pending flag and its error |
-| `useReviewState` | The decisions read from the ledger, and the three writes that add to them |
+| `useReviewState` | The decisions read from the ledger, and the writes that add to them: a step decision, the sign-off, the plan, and the author clearing feedback |
 | `useInlineDiff` | What the editor needs to show comments in the code: zones, glyphs, scroll target |
 | `useViewedFiles` | The viewed marks, loaded and persisted |
 | `useMentionDirectory` | Resolving a mention id to a name |
@@ -127,8 +128,9 @@ tabs keep each other's place.
 
 **There is no backend.** Every write is a real pull request comment, so the
 classic Azure DevOps UI keeps showing the whole story, and no credential is ever
-stored. The ledger is append-only: state is corrected by appending a new event
-(`step-reset`), never by editing or deleting an old one.
+stored. The ledger is append-only: state is corrected by appending a new event —
+`step-reset` for a reviewer retracting their own decision, `feedback-cleared` for
+the author discarding everybody's — never by editing or deleting an old one.
 
 **No dependency injection.** React has none, and this project adds none. A
 service is a module, its singleton state is module-level state (see the lazy

@@ -1,9 +1,17 @@
 import { markerPattern } from "./marker";
+import type { PlanInvalidation } from "./reviewPlan";
 
 export type ReviewEventKind =
   | "step-approved"
   | "step-changes-requested"
   | "step-reset"
+  /**
+   * The pull request author discarding everybody's feedback: on one step when
+   * the event names it, on every step when it does not. `step-reset` is the
+   * reviewer's own retraction and stays that; this one is the only event that
+   * reaches across reviewers, which is why it is honoured from the author alone.
+   */
+  | "feedback-cleared"
   | "pr-approved"
   | "pr-rejected";
 
@@ -48,6 +56,14 @@ export interface CurrentPlanIdentity {
   planVersion: number;
   planHash: string;
   stepFingerprints?: ReadonlyMap<string, string>;
+  /** Defaults to the original rule, so a caller that omits it gets it. */
+  invalidation?: PlanInvalidation;
+  /**
+   * Who may clear other reviewers' feedback. Anyone can write a comment carrying
+   * a marker, so without this a reviewer could wipe the whole review; omitting it
+   * means no `feedback-cleared` event is honoured at all.
+   */
+  authorId?: string;
 }
 
 export type LedgerEventPayload = Omit<
@@ -105,20 +121,43 @@ export function reduceReviewEvents(
   currentPlan: CurrentPlanIdentity,
 ): ReducedReviewState {
   const uniqueEvents = new Map<string, ReviewEvent>();
+  const manual = currentPlan.invalidation === "manual";
 
   for (const event of events) {
-    const currentFingerprint = event.stepId
-      ? currentPlan.stepFingerprints?.get(event.stepId)
-      : undefined;
-    if (
-      event.planId === currentPlan.planId &&
-      event.planVersion === currentPlan.planVersion &&
-      event.planHash === currentPlan.planHash &&
-      (!currentFingerprint || event.stepFingerprint === currentFingerprint) &&
-      !uniqueEvents.has(event.eventId)
-    ) {
-      uniqueEvents.set(event.eventId, event);
+    if (event.planId !== currentPlan.planId || uniqueEvents.has(event.eventId)) {
+      continue;
     }
+
+    // Under `manual` nothing about the plan document is compared: the step's
+    // identity and the author's own reset are the whole rule (§4.3).
+    if (!manual) {
+      // A reset is an act on the step, not a judgement on its contents, so it is
+      // not weighed against the shape the step had: it clears what was decided
+      // before it whatever has happened to the files since.
+      const currentFingerprint =
+        event.stepId && event.kind !== "feedback-cleared"
+          ? currentPlan.stepFingerprints?.get(event.stepId)
+          : undefined;
+      if (
+        event.planVersion !== currentPlan.planVersion ||
+        event.planHash !== currentPlan.planHash ||
+        (currentFingerprint && event.stepFingerprint !== currentFingerprint)
+      ) {
+        continue;
+      }
+    }
+
+    // A decision on a step the plan no longer has would be invisible but still
+    // counted: a stale `changes-requested` would block that reviewer's sign-off
+    // with nothing on screen to clear. Under the original rule this can never
+    // happen — the same plan hash means the same steps — so it costs nothing
+    // there and is what makes renaming and removing a step invalidate under
+    // `manual`.
+    if (event.stepId && currentPlan.stepFingerprints && !currentPlan.stepFingerprints.has(event.stepId)) {
+      continue;
+    }
+
+    uniqueEvents.set(event.eventId, event);
   }
 
   const orderedEvents = [...uniqueEvents.values()].sort((left, right) => {
@@ -137,6 +176,16 @@ export function reduceReviewEvents(
         event.reviewerId,
         event.kind === "pr-approved" ? "approved" : "rejected",
       );
+      continue;
+    }
+
+    if (event.kind === "feedback-cleared") {
+      if (
+        currentPlan.authorId &&
+        event.reviewerId.toLowerCase() === currentPlan.authorId.toLowerCase()
+      ) {
+        clearFeedback(mutableStepStates, mutableStepDecisions, event.stepId);
+      }
       continue;
     }
 
@@ -178,6 +227,28 @@ export function reduceReviewEvents(
   };
 }
 
+/**
+ * Wipes what every reviewer had decided, on one step or on all of them. Applied
+ * in date order like every other event, so a decision recorded after the reset
+ * survives it.
+ */
+function clearFeedback(
+  stepStates: Map<string, Map<string, StepReviewStatus>>,
+  stepDecisions: Map<string, Map<string, StepDecision>>,
+  stepId: string | undefined,
+): void {
+  if (!stepId) {
+    stepStates.clear();
+    stepDecisions.clear();
+    return;
+  }
+
+  stepDecisions.delete(stepId);
+  for (const reviewerStates of stepStates.values()) {
+    reviewerStates.delete(stepId);
+  }
+}
+
 export function hasOutstandingChanges(
   state: ReducedReviewState,
   reviewerId: string,
@@ -185,6 +256,21 @@ export function hasOutstandingChanges(
   return [...(state.stepStates.get(reviewerId)?.values() ?? [])].some(
     (status) => status === "changes-requested",
   );
+}
+
+/**
+ * Who has decided on one step, or on any step when none is named. It is the list
+ * a reset takes something away from, so it drives both the confirmation the
+ * author sees and the people the reset comment mentions.
+ */
+export function reviewersWithDecisions(
+  stepDecisions: ReadonlyMap<string, ReadonlyMap<string, StepDecision>>,
+  stepId?: string,
+): string[] {
+  const byStep = stepId
+    ? [stepDecisions.get(stepId) ?? new Map<string, StepDecision>()]
+    : [...stepDecisions.values()];
+  return [...new Set(byStep.flatMap((byReviewer) => [...byReviewer.keys()]))];
 }
 
 export interface StepDecisionTally {
@@ -269,12 +355,22 @@ export function hasOutstandingChangesAfterApproval(
   );
 }
 
+/**
+ * Keyed by kind rather than a chain of comparisons on purpose: `Record` makes
+ * the compiler demand an entry for every member of the union, so a kind added to
+ * the type but not here is a build error instead of an event that is written to
+ * the pull request and silently dropped when read back.
+ */
+const reviewEventKinds: Readonly<Record<ReviewEventKind, true>> = {
+  "step-approved": true,
+  "step-changes-requested": true,
+  "step-reset": true,
+  "feedback-cleared": true,
+  "pr-approved": true,
+  "pr-rejected": true,
+};
+
 function isReviewEventKind(value: unknown): value is ReviewEventKind {
-  return (
-    value === "step-approved" ||
-    value === "step-changes-requested" ||
-    value === "step-reset" ||
-    value === "pr-approved" ||
-    value === "pr-rejected"
-  );
+  // `hasOwn`, not `in`: every object inherits `toString` and friends.
+  return typeof value === "string" && Object.hasOwn(reviewEventKinds, value);
 }

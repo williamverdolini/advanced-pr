@@ -11,7 +11,87 @@ describe("review plan", () => {
       '<!-- advanced-pr:v2 {"kind":"review-plan","planId":"plan-1","version":2} -->',
     );
 
-    expect(marker).toEqual({ planId: "plan-1", version: 2 });
+    expect(marker).toEqual({ planId: "plan-1", version: 2, invalidation: "plan-hash" });
+  });
+
+  it("reads the invalidation policy, and only the one opt-in value", () => {
+    const read = (invalidation: string): string | undefined =>
+      parsePlanMarker(
+        `<!-- advanced-pr:v2 {"kind":"review-plan","planId":"plan-1","version":1,"invalidation":"${invalidation}"} -->`,
+      )?.invalidation;
+
+    expect(read("manual")).toBe("manual");
+    expect(read("Manual")).toBe("plan-hash");
+    expect(read("none")).toBe("plan-hash");
+  });
+
+  describe("step identity", () => {
+    const legacy = { planId: "plan-1", version: 1 } as const;
+    const manual = { planId: "plan-1", version: 1, invalidation: "manual" } as const;
+
+    it("keeps the original ids for a plan without the policy", () => {
+      const before = buildStepPlan("1. Core\n- src/core.ts", ["src/core.ts"], legacy);
+      const after = buildStepPlan("1. Other\n\n2. Core\n- src/core.ts", ["src/core.ts"], legacy);
+
+      // Order is part of the id under the original rule, so moving the step
+      // changes it. That is the behaviour existing pull requests depend on.
+      expect(before.steps[0].stepId).not.toBe(after.steps[1].stepId);
+    });
+
+    it("names a step after its title under manual, whatever its position", () => {
+      const before = buildStepPlan("1. Sort contract\n- src/core.ts", ["src/core.ts"], manual);
+      const after = buildStepPlan(
+        "1. Other\n\n2. Sort contract\n- src/core.ts",
+        ["src/core.ts"],
+        manual,
+      );
+
+      expect(before.steps[0].stepId).toBe("step-sort-contract");
+      expect(after.steps[1].stepId).toBe("step-sort-contract");
+    });
+
+    it("gives the catch-all one id across every revision", () => {
+      const one = buildStepPlan("1. Core\n- src/core.ts", ["src/core.ts", "README.md"], manual);
+      const two = buildStepPlan(
+        "1. Core\n- src/core.ts\n\n2. Docs",
+        ["src/core.ts", "README.md"],
+        manual,
+      );
+
+      expect(one.steps.at(-1)?.stepId).toBe("step-catch-all");
+      expect(two.steps.at(-1)?.stepId).toBe("step-catch-all");
+    });
+
+    it("leaves the reserved id to the catch-all and numbers the step that wanted it", () => {
+      const plan = buildStepPlan("1. Catch all\n- src/core.ts", ["src/core.ts"], manual);
+
+      expect(plan.steps[0].stepId).toBe("step-catch-all-2");
+      expect(plan.steps[1].stepId).toBe("step-catch-all");
+    });
+
+    it("numbers repeated titles so their decisions stay apart", () => {
+      const plan = buildStepPlan("1. Tests\n\n2. Tests", [], manual);
+
+      expect(plan.steps.map((step) => step.stepId)).toEqual([
+        "step-tests",
+        "step-tests-2",
+        "step-catch-all",
+      ]);
+      expect(plan.warnings.map((warning) => warning.kind)).toEqual(["duplicate-title"]);
+    });
+
+    it("falls back to a hash for a title a slug cannot keep anything of", () => {
+      const plan = buildStepPlan("1. \u2728\u2728", [], manual);
+
+      expect(plan.steps[0].stepId).toMatch(/^step-[0-9a-f]{8}$/);
+    });
+
+    it("reads an accented title and its plain spelling as the same step", () => {
+      const accented = buildStepPlan("1. Mod\u00e8le", [], manual);
+      const plain = buildStepPlan("1. Modele", [], manual);
+
+      expect(accented.steps[0].stepId).toBe(plain.steps[0].stepId);
+    });
   });
 
   describe("explain blocks", () => {
