@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.1
+
+- **Comments no longer scroll sideways with the code.** A comment in the diff used to be laid out
+  against the width of the longest line in the file, so on a file wide enough to have a
+  horizontal scrollbar reading a comment meant scrolling to it. Each one is now sized to the
+  width the editor actually shows, and stays where it is while the code scrolls underneath.
+- Comments stop growing at **750px**, whatever the screen: prose stops being readable long
+  before a wide window runs out of room, and the code beside the comment stays visible.
+
 ## 0.7.0
 
 Feedback that survives the plan.
