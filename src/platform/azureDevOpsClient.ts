@@ -406,7 +406,15 @@ export async function createReviewPlan(
   version: number,
   markdown: string,
 ): Promise<void> {
-  const marker = `<!-- advanced-pr:v2 ${JSON.stringify({ kind: "review-plan", planId, version })} -->`;
+  // Every plan this extension writes opts in to `manual` invalidation: from here
+  // on, feedback on a step outlives a revision of the plan around it. A plan
+  // posted by hand or by a tool has to carry the field to get the same rule.
+  const marker = `<!-- advanced-pr:v2 ${JSON.stringify({
+    kind: "review-plan",
+    planId,
+    version,
+    invalidation: "manual",
+  })} -->`;
   const content = `${markdown.trim()}\n\n${marker}`;
   const thread = {
     status: CommentThreadStatus.Active,

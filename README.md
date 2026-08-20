@@ -36,17 +36,37 @@ The `### Explain` block is optional and purely descriptive: it is shown above th
 
 **Related files hang off a file entry.** A bullet indented under another one is a file worth reading *beside* it, typically the test that covers it: the row shows a counter that expands into the related files, each of them openable, commentable and markable as viewed like any other. They are context, not work, so they never count towards the step's file total, and a related file still lands in `Everything else` unless some step lists it on a line of its own. Adding or rewriting them never invalidates an approval, for the same reason `### Explain` does not.
 
-**Puts comments inside the diff.** Threads render under the line they refer to, with reply, edit, like and resolve in place. Markdown is rendered, with a live preview while writing, and the comment icon in the margin opens and closes each thread. The file tree lists threads under their file, so the same selection drives the tree, the margin and the editor.
+**Puts comments inside the diff.** Threads render under the line they refer to, with reply, edit, like and resolve in place, and replying and resolving in one action. Markdown is rendered, with a live preview while writing, and the comment icon in the margin opens and closes each thread. The file tree lists threads under their file, so the same selection drives the tree, the margin and the editor.
 
 **Renders a diff that reads like the native one.** Monaco, unified by default with a side-by-side switch, following the host's light or dark theme. Added and deleted files are shown as plain content instead of a diff against nothing; the tree marks each file as added, modified, deleted or renamed, and tracks which ones you have viewed.
 
-**Records approvals as comments.** Approving a step appends an event to a thread-ledger; a deterministic reducer rebuilds the review state from those comments on every load, which is why no database is needed. Approving the last step asks whether to approve the whole pull request, the only action that changes your Azure DevOps vote. A push that changes a step's files invalidates that step's approval and only that one.
+**Records approvals as comments.** Approving a step appends an event to a thread-ledger; a deterministic reducer rebuilds the review state from those comments on every load, which is why no database is needed. Approving the last step asks whether to approve the whole pull request, the only action that changes your Azure DevOps vote.
+
+**Feedback on a step outlives the plan around it.** A step is identified by its title, so reordering the steps, revising which files a step lists, or rewriting its notes leaves every decision standing. Feedback stops counting in exactly three cases:
+
+- the step is **renamed**, which makes it a different step — two steps sharing a title are numbered apart, and warned about;
+- the step is **removed** from the plan;
+- the pull request **author clears it**, on one step or on the whole review, from the `...` menu beside the step commands.
+
+A rename or a removal is silent, because the plan says what it says. A reset is not: it writes a comment **mentioning everyone whose decision it discards**, so nobody finds their approval gone without being told. Nothing is ever deleted — a reset is one more comment, and the decisions it clears stay readable in the pull request. Reviewer votes are never touched, because Azure DevOps only lets each reviewer set their own.
+
+Pull requests whose plan predates this rule keep the original one, where any change to the plan discards every decision. A plan moves to the new rule the first time its author saves it from the extension; that one save clears the feedback recorded until then, and it is the last time that happens.
+
+### Writing the plan from outside the extension
+
+The plan is a plain pull request comment: anything that can post a comment as the pull request author can create it, an agent using the REST API included. What makes it a plan is the trailing marker, which must declare the invalidation rule to get the behaviour above:
+
+```html
+<!-- advanced-pr:v2 {"kind":"review-plan","planId":"550e8400-e29b-41d4-a716-446655440000","version":1,"invalidation":"manual"} -->
+```
+
+`planId` is any stable identifier — a fresh GUID for a new plan, the same one when revising it, with `version` incremented. Without `"invalidation":"manual"` the plan is read under the original rule, so a tool that omits the field silently gives up the guarantee.
 
 ## What it does not do yet
 
 - **Reject the entire pull request** (`vote -10`): approvals and change requests only.
 - **Build and policy checks**, and **linked work items**: read them in the native tabs.
-- **Persist UI preferences** other than viewed files: diff layout and pane width reset with the session.
+- **Persist UI preferences** other than viewed files and the files pane width: the diff layout resets with the session.
 
 The behaviour that still requires validation in a real Azure DevOps organization is listed in the [implementation plan](docs/azdo-extension-feasibility-plan.md), which is also the technical reference for every design decision summarised here.
 

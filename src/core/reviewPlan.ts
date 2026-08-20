@@ -1,9 +1,26 @@
 import { stableHash } from "./hash";
 import { markerPattern } from "./marker";
 
+/**
+ * When feedback on a step stops counting.
+ *
+ * `plan-hash` is the original rule: every decision is dropped as soon as the
+ * plan document changes at all, because a decision carries the hash of the plan
+ * it was given against. It is what every plan written before this field existed
+ * uses, and it stays the default so those pull requests keep behaving exactly as
+ * they did.
+ *
+ * `manual` keeps feedback until the step it was given on is renamed, removed, or
+ * cleared by the pull request author. Under it a step's identity is its title,
+ * so reordering steps and revising their file lists costs nothing.
+ */
+export type PlanInvalidation = "plan-hash" | "manual";
+
 export interface ReviewPlanMarker {
   planId: string;
   version: number;
+  /** Absent in every plan written before the field existed: see the type. */
+  invalidation?: PlanInvalidation;
 }
 
 export interface ReviewStep {
@@ -47,6 +64,7 @@ export interface PlanWarning {
 export interface StepPlan {
   planId: string;
   version: number;
+  invalidation: PlanInvalidation;
   sourceThreadId?: number;
   steps: ReviewStep[];
   warnings: PlanWarning[];
@@ -82,7 +100,14 @@ export function parsePlanMarker(content: string): ReviewPlanMarker | undefined {
       return undefined;
     }
 
-    return { planId: value.planId, version: value.version as number };
+    return {
+      planId: value.planId,
+      version: value.version as number,
+      // Anything but the one opt-in value reads as the original rule, so a plan
+      // written before this field existed, or by a tool that does not know about
+      // it, is never switched to the new one by accident.
+      invalidation: value.invalidation === "manual" ? "manual" : "plan-hash",
+    };
   } catch {
     return undefined;
   }
@@ -112,7 +137,12 @@ export function buildStepPlan(
     }
   }
 
+  const invalidation = marker.invalidation ?? "plan-hash";
   const sections = parseSections(content);
+  const identities = assignStepIdentities(
+    sections.map((section) => section.title),
+    invalidation,
+  );
   const seenTitles = new Set<string>();
   const assigned = new Set<string>();
   const steps: ReviewStep[] = [];
@@ -162,6 +192,7 @@ export function buildStepPlan(
 
     steps.push(
       createStep({
+        stepId: identities.stepIds[order],
         title: section.title,
         order,
         isCatchAll: false,
@@ -177,7 +208,8 @@ export function buildStepPlan(
     .map(([, path]) => path);
   steps.push(
     createStep({
-      title: "Everything else",
+      stepId: identities.catchAllStepId,
+      title: catchAllTitle,
       order: steps.length,
       isCatchAll: true,
       files: catchAllFiles,
@@ -197,7 +229,7 @@ export function buildStepPlan(
     })),
     {
       order: sections.length,
-      title: "Everything else",
+      title: catchAllTitle,
       isCatchAll: true,
       files: [] as string[],
     },
@@ -206,11 +238,81 @@ export function buildStepPlan(
   return {
     planId: marker.planId,
     version: marker.version,
+    invalidation,
     sourceThreadId,
     steps,
     warnings,
     planHash: stableHash(JSON.stringify(canonical)),
   };
+}
+
+/** The title of the step that collects whatever no other step claimed. */
+const catchAllTitle = "Everything else";
+
+/**
+ * Reserved for the catch-all under `manual`, and claimed before any section
+ * title can slug to it: a step actually called "Catch all" is then the one that
+ * gets numbered, and the catch-all keeps one id across every revision of a plan.
+ */
+const catchAllSlug = "catch-all";
+
+/** Long enough to stay recognisable, short enough to read inside a comment. */
+const maxSlugLength = 48;
+
+interface StepIdentities {
+  stepIds: string[];
+  catchAllStepId: string;
+}
+
+function assignStepIdentities(
+  titles: readonly string[],
+  invalidation: PlanInvalidation,
+): StepIdentities {
+  if (invalidation !== "manual") {
+    // The original scheme, kept verbatim: the ids of a plan already carrying
+    // decisions must not move under it.
+    return {
+      stepIds: titles.map((title, order) => `step-${stableHash(`${order}:${title}`)}`),
+      catchAllStepId: `step-${stableHash(`${titles.length}:${catchAllTitle}`)}`,
+    };
+  }
+
+  const claimed = new Map<string, number>([[catchAllSlug, 1]]);
+  return {
+    stepIds: titles.map((title) => `step-${claimSlug(claimed, toSlug(title))}`),
+    catchAllStepId: `step-${catchAllSlug}`,
+  };
+}
+
+/**
+ * Two steps with the same title are the same step as far as identity goes, which
+ * is what `duplicate-title` warns about. Numbering the later ones keeps their
+ * decisions apart anyway, at the cost of making those ids depend on the order.
+ */
+function claimSlug(claimed: Map<string, number>, slug: string): string {
+  const count = (claimed.get(slug) ?? 0) + 1;
+  claimed.set(slug, count);
+  return count === 1 ? slug : `${slug}-${count}`;
+}
+
+/**
+ * A title as an identifier: lower case, words joined by hyphens. Readable on
+ * purpose — the id is written into every decision comment, so anyone reading the
+ * pull request, or writing an event by hand, can tell which step it belongs to.
+ */
+function toSlug(title: string): string {
+  const slug = title
+    .toLocaleLowerCase()
+    .normalize("NFKD")
+    // Combining marks left behind by the decomposition, so an accented title
+    // and its plain spelling do not become two different steps.
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .slice(0, maxSlugLength)
+    .replace(/^-+|-+$/g, "");
+  // A title with nothing a slug can keep — an emoji, a non-Latin script — still
+  // needs an identity, and the hash of the title is one that does not move.
+  return slug || stableHash(title);
 }
 
 /** `### Explain`, at any heading level, with or without a trailing colon. */
@@ -316,6 +418,7 @@ function resolveRelatedFiles(
 }
 
 function createStep({
+  stepId,
   title,
   order,
   isCatchAll,
@@ -323,6 +426,7 @@ function createStep({
   relatedFiles = noRelatedFiles,
   explanation,
 }: {
+  stepId: string;
   title: string;
   order: number;
   isCatchAll: boolean;
@@ -332,7 +436,7 @@ function createStep({
 }): ReviewStep {
   const sortedFiles = [...files].sort(compareText);
   return {
-    stepId: `step-${stableHash(`${order}:${title}`)}`,
+    stepId,
     order,
     title,
     isCatchAll,

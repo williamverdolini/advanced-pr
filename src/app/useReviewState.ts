@@ -3,6 +3,7 @@ import {
   canApprovePullRequest,
   hasOutstandingChangesAfterApproval,
   reduceReviewEvents,
+  reviewersWithDecisions,
   type StepDecision,
   type StepReviewStatus,
 } from "../core/ledger";
@@ -43,6 +44,14 @@ export interface ReviewState {
   decideStep: (step: ReviewStep, decision: StepDecisionKind) => void;
   approvePullRequest: () => void;
   createPlan: () => void;
+  /**
+   * Reviewers with a decision on one step, or on any step when none is named.
+   * Who a reset would take something away from, the caller included: it is what
+   * decides whether the command is worth offering at all.
+   */
+  reviewersWithFeedback: (step?: ReviewStep) => readonly string[];
+  /** The author discarding every reviewer's feedback, on one step or on all. */
+  clearFeedback: (step?: ReviewStep) => void;
 }
 
 /**
@@ -71,6 +80,9 @@ export function useReviewState({
     planId: plan.planId,
     planVersion: plan.version,
     planHash: plan.planHash,
+    invalidation: plan.invalidation,
+    // Only the pull request author may clear what other reviewers decided.
+    authorId: workspace.authorId,
     stepFingerprints: new Map(plan.steps.map((step) => [step.stepId, step.fingerprint])),
   });
   const reviewerSteps = reviewState.stepStates.get(reviewerId);
@@ -169,6 +181,31 @@ export function useReviewState({
     }, "Unable to approve the pull request.");
   };
 
+  const reviewersWithFeedback = (step?: ReviewStep): readonly string[] =>
+    reviewersWithDecisions(reviewState.stepDecisions, step?.stepId);
+
+  const clearFeedback = (step?: ReviewStep): void => {
+    // Everyone whose decision goes is mentioned, the author included when they
+    // had reviewed a step themselves: the comment is the record of who was
+    // affected, and leaving somebody out of it makes it a partial one.
+    const mentioned = reviewersWithFeedback(step);
+    void runAction(async () => {
+      await appendLedgerEvent(workspace, describeFeedbackCleared(step, mentioned), {
+        eventId: crypto.randomUUID(),
+        kind: "feedback-cleared",
+        planId: plan.planId,
+        planVersion: plan.version,
+        planHash: plan.planHash,
+        stepId: step?.stepId,
+        iteration: workspace.iterationId,
+        // Recorded, like every other step event, as the shape the step had when
+        // the reset was written. It is evidence, not a condition.
+        stepFingerprint: step?.fingerprint,
+      });
+      await onRefresh();
+    }, "Unable to clear the feedback on this step.");
+  };
+
   const createPlan = (): void => {
     if (!planDraft.trim()) {
       return;
@@ -199,7 +236,31 @@ export function useReviewState({
     decideStep,
     approvePullRequest,
     createPlan,
+    reviewersWithFeedback,
+    clearFeedback,
   };
+}
+
+/**
+ * A reset is the one action nobody asked for, so it names the people it takes a
+ * decision away from. Mentions come first: Azure DevOps shows the start of a
+ * comment in its notification, and the reason for it has to be in that part.
+ */
+function describeFeedbackCleared(
+  step: ReviewStep | undefined,
+  mentionedReviewerIds: readonly string[],
+): string {
+  const heading = step
+    ? `\ud83e\uddf9 **Step feedback cleared: \`${step.title}\`**`
+    : "\ud83e\uddf9 **All step feedback cleared**";
+  const notice = step
+    ? `the decision recorded on \`${step.title}\` has been cleared by the pull request author. The step is open for review again.`
+    : "every step decision on this pull request has been cleared by its author. The steps are open for review again.";
+  const mentions = mentionedReviewerIds.map((id) => `@<${id}>`).join(" ");
+
+  return mentions
+    ? `${heading}\n\n${mentions} \u2014 ${notice}`
+    : `${heading}\n\n${notice[0].toUpperCase()}${notice.slice(1)}`;
 }
 
 /** The human-readable half of a ledger event, which is what Azure DevOps shows. */

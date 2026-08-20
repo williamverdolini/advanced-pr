@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.7.0
+
+Feedback that survives the plan.
+
+- **A step's feedback no longer decays on its own.** Approvals and change requests used to be
+  discarded as soon as the plan changed at all — reordering the steps, moving a file, even
+  rewriting the notes of a step nobody had reviewed. A step is now identified by its title, so
+  all of that leaves every decision standing. Feedback stops counting only when the step is
+  renamed, when it is removed from the plan, or when the pull request author clears it.
+- **The author can clear feedback**, on the selected step or on the whole review, from the `...`
+  menu beside the step commands. The confirmation names everyone who loses a decision before
+  anything is written, and the reset comment **mentions them**, so nobody finds their approval
+  gone without being told. Nothing is deleted — the reset is one more comment and the decisions
+  it clears stay readable — and no reviewer's vote is changed, because Azure DevOps only lets
+  each reviewer set their own.
+- Step ids are now readable: `step-sort-contract` instead of `step-a91f3c2d`, which is what the
+  decision comments in the pull request carry.
+- The plan marker is documented in the README, for the case where the first plan is posted by a
+  script or an agent through the REST API rather than from the extension: it has to carry
+  `"invalidation":"manual"` to get the rule above.
+- **Pull requests already under review are untouched.** The rule is a property of the plan, not
+  of this build: a plan carries `"invalidation":"manual"` in its marker to opt in, and one
+  without the field keeps the original behaviour for good. A plan opts in the first time its
+  author saves it from the extension — that one save clears the feedback recorded until then,
+  and it is the last time that happens.
+
 ## 0.6.0
 
 Reading a file with its context.
@@ -14,7 +40,10 @@ Reading a file with its context.
 - **Comment text can be selected** and copied. Monaco marks its own editor unselectable and
   re-enables it for the code lines alone, which left every comment in the diff impossible to
   select.
-- **Reply & resolve** in one action, beside `Reply`, on a thread that is still open.
+- **Reply & resolve** in one action, beside `Reply` — `Reply & reopen` on a thread that is
+  already resolved.
+- The thread's own `Reply` and `Resolve` buttons **step aside while the reply box is open**: the
+  box offers the same actions, and a row kept above it costs height inside the diff.
 - Comments and the `Explain` notes are set in **14px** instead of 12px, and the expanded
   `Explain` dialog in 15px: they are prose, and were being sized like the chrome around them.
 

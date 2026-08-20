@@ -9,6 +9,9 @@ import type { ReviewStep } from "../core/reviewPlan";
  *  `StepDecision`, which is a decision already recorded, by whom and when. */
 export type StepDecisionKind = "step-approved" | "step-changes-requested" | "step-reset";
 
+/** How much feedback the author is about to clear. */
+export type FeedbackScope = "step" | "all";
+
 export interface StepActionsProps {
   step?: ReviewStep;
   status?: StepReviewStatus;
@@ -17,8 +20,16 @@ export interface StepActionsProps {
   /** Only the pull request author may write or revise the plan. */
   isAuthor: boolean;
   planExists: boolean;
+  /**
+   * Whether there is feedback to clear, per scope. The menu hides the entry that
+   * would do nothing rather than showing it disabled: it is an author's command
+   * on other people's decisions, and offering it when there are none only
+   * invites the question of what it does.
+   */
+  clearableFeedback: Readonly<Record<FeedbackScope, boolean>>;
   onDecision: (step: ReviewStep, decision: StepDecisionKind) => void;
   onTogglePlanEditor: () => void;
+  onRequestClearFeedback: (scope: FeedbackScope) => void;
 }
 
 /**
@@ -32,8 +43,10 @@ export function StepActions({
   reviewClosed,
   isAuthor,
   planExists,
+  clearableFeedback,
   onDecision,
   onTogglePlanEditor,
+  onRequestClearFeedback,
 }: StepActionsProps): React.ReactElement {
   return (
     <div className="toolbar-actions">
@@ -103,6 +116,10 @@ export function StepActions({
             onActivate: (menuItem) => {
               if (menuItem.id === "toggle-plan-editor") {
                 onTogglePlanEditor();
+              } else if (menuItem.id === "clear-step-feedback") {
+                onRequestClearFeedback("step");
+              } else if (menuItem.id === "clear-all-feedback") {
+                onRequestClearFeedback("all");
               }
             },
             menuProps: {
@@ -112,6 +129,18 @@ export function StepActions({
                   id: "toggle-plan-editor",
                   text: planExists ? "Edit plan" : "Create plan",
                   iconProps: { iconName: "Edit", size: IconSize.small },
+                },
+                {
+                  id: "clear-step-feedback",
+                  text: "Clear feedback on this step",
+                  iconProps: { iconName: "CircleRing", size: IconSize.small },
+                  hidden: !step || !clearableFeedback.step,
+                },
+                {
+                  id: "clear-all-feedback",
+                  text: "Clear all step feedback",
+                  iconProps: { iconName: "Clear", size: IconSize.small },
+                  hidden: !clearableFeedback.all,
                 },
               ],
             },

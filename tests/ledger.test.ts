@@ -6,9 +6,11 @@ import {
   hasOutstandingChangesAfterApproval,
   parseLedgerEvent,
   reduceReviewEvents,
+  reviewersWithDecisions,
   summarizeStepApprovals,
   tallyStepDecisions,
   type ReviewEvent,
+  type StepDecision,
 } from "../src/core/ledger";
 
 const currentPlan = { planId: "plan-1", planVersion: 1, planHash: "hash-1" };
@@ -43,6 +45,34 @@ describe("review ledger", () => {
 
     expect(parsed?.reviewerId).toBe("actual-author");
     expect(parsed?.commentId).toBe(42);
+  });
+
+  it("reads back every kind of event it writes", () => {
+    // A kind added to the union but not to the runtime guard would be written to
+    // the pull request and dropped on the way back, which looks exactly like the
+    // action having done nothing.
+    const kinds: ReviewEvent["kind"][] = [
+      "step-approved",
+      "step-changes-requested",
+      "step-reset",
+      "feedback-cleared",
+      "pr-approved",
+      "pr-rejected",
+    ];
+
+    for (const kind of kinds) {
+      const content = formatLedgerEvent("label", event({ kind }));
+      expect(parseLedgerEvent(content, "reviewer-1", "2026-08-13T10:00:00Z", 1)?.kind).toBe(kind);
+    }
+  });
+
+  it("refuses a kind that is only an inherited property name", () => {
+    const content = formatLedgerEvent("label", {
+      ...event({}),
+      kind: "toString" as ReviewEvent["kind"],
+    });
+
+    expect(parseLedgerEvent(content, "reviewer-1", "2026-08-13T10:00:00Z", 1)).toBeUndefined();
   });
 
   it("deduplicates retries by event id", () => {
@@ -270,5 +300,241 @@ describe("review ledger", () => {
     );
 
     expect(state.stepStates.get("reviewer-1")?.has("step-1")).not.toBe(true);
+  });
+
+  describe("reviewers with decisions", () => {
+    const decisions: ReadonlyMap<string, ReadonlyMap<string, StepDecision>> = new Map([
+      [
+        "step-core",
+        new Map([
+          ["reviewer-1", { reviewerId: "reviewer-1", status: "approved", publishedDate: "d" }],
+        ]),
+      ],
+      [
+        "step-tests",
+        new Map([
+          ["reviewer-1", { reviewerId: "reviewer-1", status: "approved", publishedDate: "d" }],
+          [
+            "reviewer-2",
+            { reviewerId: "reviewer-2", status: "changes-requested", publishedDate: "d" },
+          ],
+        ]),
+      ],
+    ]);
+
+    it("lists them once across every step", () => {
+      expect(reviewersWithDecisions(decisions)).toEqual(["reviewer-1", "reviewer-2"]);
+    });
+
+    it("lists them for one step, and none for a step nobody decided", () => {
+      expect(reviewersWithDecisions(decisions, "step-core")).toEqual(["reviewer-1"]);
+      expect(reviewersWithDecisions(decisions, "step-gone")).toEqual([]);
+    });
+  });
+
+  it("drops a decision on a step the plan no longer has", () => {
+    const state = reduceReviewEvents([event({ stepId: "step-gone" })], {
+      ...currentPlan,
+      stepFingerprints: new Map([["step-1", "fingerprint-1"]]),
+    });
+
+    // Otherwise the decision is invisible and still counted: a stale
+    // `changes-requested` would block that reviewer's sign-off for good.
+    expect(state.stepStates.get("reviewer-1")).toBeUndefined();
+  });
+
+  it("clears a step on a plan still under the original rule", () => {
+    // The reset must work on a pull request whose plan predates the opt-in, and
+    // it carries no fingerprint of its own to be weighed against.
+    const state = reduceReviewEvents(
+      [
+        event({ stepFingerprint: "fingerprint-1" }),
+        event({
+          eventId: "event-2",
+          kind: "feedback-cleared",
+          reviewerId: "author-1",
+          stepFingerprint: undefined,
+          publishedDate: "2026-08-13T11:00:00Z",
+          commentId: 2,
+        }),
+      ],
+      {
+        ...currentPlan,
+        authorId: "author-1",
+        stepFingerprints: new Map([["step-1", "fingerprint-1"]]),
+      },
+    );
+
+    expect(state.stepStates.get("reviewer-1")?.has("step-1")).toBe(false);
+  });
+
+  describe("manual invalidation", () => {
+    const manualPlan = {
+      planId: "plan-1",
+      planVersion: 4,
+      planHash: "hash-4",
+      invalidation: "manual",
+      authorId: "author-1",
+      stepFingerprints: new Map([
+        ["step-core", "fingerprint-now"],
+        ["step-tests", "fingerprint-now"],
+      ]),
+    } as const;
+
+    const approvedCore = event({
+      stepId: "step-core",
+      planVersion: 1,
+      planHash: "hash-1",
+      stepFingerprint: "fingerprint-then",
+    });
+
+    it("keeps a decision across plan revisions and file changes", () => {
+      const state = reduceReviewEvents([approvedCore], manualPlan);
+
+      expect(state.stepStates.get("reviewer-1")?.get("step-core")).toBe("approved");
+    });
+
+    it("still drops a decision on a step that is gone, renamed included", () => {
+      const state = reduceReviewEvents(
+        [event({ stepId: "step-sorting", kind: "step-changes-requested" })],
+        manualPlan,
+      );
+
+      expect(state.stepStates.get("reviewer-1")).toBeUndefined();
+      expect(hasOutstandingChanges(state, "reviewer-1")).toBe(false);
+    });
+
+    it("lets the author clear one step for every reviewer", () => {
+      const state = reduceReviewEvents(
+        [
+          approvedCore,
+          event({ eventId: "event-2", reviewerId: "reviewer-2", stepId: "step-tests" }),
+          event({
+            eventId: "event-3",
+            kind: "feedback-cleared",
+            reviewerId: "author-1",
+            stepId: "step-core",
+            publishedDate: "2026-08-13T11:00:00Z",
+            commentId: 3,
+          }),
+        ],
+        manualPlan,
+      );
+
+      expect(state.stepStates.get("reviewer-1")?.has("step-core")).toBe(false);
+      expect(state.stepDecisions.get("step-core")).toBeUndefined();
+      expect(state.stepStates.get("reviewer-2")?.get("step-tests")).toBe("approved");
+    });
+
+    it("lets the author clear every step at once", () => {
+      const state = reduceReviewEvents(
+        [
+          approvedCore,
+          event({ eventId: "event-2", reviewerId: "reviewer-2", stepId: "step-tests" }),
+          event({
+            eventId: "event-3",
+            kind: "feedback-cleared",
+            reviewerId: "author-1",
+            stepId: undefined,
+            publishedDate: "2026-08-13T11:00:00Z",
+            commentId: 3,
+          }),
+        ],
+        manualPlan,
+      );
+
+      expect(state.stepStates.size).toBe(0);
+      expect(state.stepDecisions.size).toBe(0);
+    });
+
+    it("keeps a decision recorded after the reset", () => {
+      const state = reduceReviewEvents(
+        [
+          event({
+            eventId: "event-1",
+            kind: "feedback-cleared",
+            reviewerId: "author-1",
+            stepId: undefined,
+          }),
+          event({
+            eventId: "event-2",
+            stepId: "step-core",
+            publishedDate: "2026-08-13T11:00:00Z",
+            commentId: 2,
+          }),
+        ],
+        manualPlan,
+      );
+
+      expect(state.stepStates.get("reviewer-1")?.get("step-core")).toBe("approved");
+    });
+
+    it("takes a reset from the author whatever the case of the identity id", () => {
+      const state = reduceReviewEvents(
+        [
+          approvedCore,
+          event({
+            eventId: "event-2",
+            kind: "feedback-cleared",
+            reviewerId: "AUTHOR-1",
+            stepId: undefined,
+            publishedDate: "2026-08-13T11:00:00Z",
+            commentId: 2,
+          }),
+        ],
+        manualPlan,
+      );
+
+      expect(state.stepStates.size).toBe(0);
+    });
+
+    it("ignores a reset written by anyone but the pull request author", () => {
+      const state = reduceReviewEvents(
+        [
+          approvedCore,
+          event({
+            eventId: "event-2",
+            kind: "feedback-cleared",
+            reviewerId: "reviewer-2",
+            stepId: undefined,
+            publishedDate: "2026-08-13T11:00:00Z",
+            commentId: 2,
+          }),
+        ],
+        manualPlan,
+      );
+
+      // Anyone can write a comment carrying a marker, so the reducer must not
+      // take a reset from anyone but the author.
+      expect(state.stepStates.get("reviewer-1")?.get("step-core")).toBe("approved");
+    });
+
+    it("ignores a reset when no author is known", () => {
+      const state = reduceReviewEvents(
+        [
+          approvedCore,
+          event({
+            eventId: "event-2",
+            kind: "feedback-cleared",
+            reviewerId: "author-1",
+            stepId: undefined,
+            publishedDate: "2026-08-13T11:00:00Z",
+            commentId: 2,
+          }),
+        ],
+        { ...manualPlan, authorId: undefined },
+      );
+
+      expect(state.stepStates.get("reviewer-1")?.get("step-core")).toBe("approved");
+    });
+
+    it("keeps refusing an event from another plan", () => {
+      const state = reduceReviewEvents(
+        [event({ stepId: "step-core", planId: "plan-2" })],
+        manualPlan,
+      );
+
+      expect(state.stepStates.size).toBe(0);
+    });
   });
 });

@@ -33,13 +33,14 @@ import {
 } from "../platform/azureDevOpsClient";
 import { loadSplitterWidth, saveSplitterWidth } from "../platform/splitterWidthStore";
 import { buildDiffCommands } from "./diffCommands";
+import { ClearFeedbackDialog } from "./ClearFeedbackDialog";
 import { ExplainPanel } from "./ExplainPanel";
 import { InlineComposer } from "./InlineComposer";
 import { InlineThreadCard } from "./InlineThreadCard";
 import { PlanEditor } from "./PlanEditor";
 import { createPlanTemplate } from "./planTemplate";
 import { SignOffDialog } from "./SignOffDialog";
-import { StepActions } from "./StepActions";
+import { StepActions, type FeedbackScope } from "./StepActions";
 import { StepWizard } from "./StepWizard";
 import { useAsyncResource } from "./useAsyncResource";
 import { useCollapsedThreads } from "./useCollapsedThreads";
@@ -74,6 +75,7 @@ export function ReviewWorkspace({
   const [sideBySide, setSideBySide] = React.useState(false);
   const [draft, setDraft] = React.useState<DiffSelection>();
   const [explainExpanded, setExplainExpanded] = React.useState(false);
+  const [clearFeedbackScope, setClearFeedbackScope] = React.useState<FeedbackScope>();
   const [planEditorOpen, setPlanEditorOpen] = React.useState(false);
   const [planDraft, setPlanDraft] = React.useState(() => createPlanTemplate(workspace));
   // Read once, on mount: the Splitter owns its width from there on, and feeding
@@ -327,8 +329,13 @@ export function ReviewWorkspace({
               reviewClosed={review.reviewClosed}
               isAuthor={reviewerId === workspace.authorId}
               planExists={Boolean(workspace.plan.sourceThreadId)}
+              clearableFeedback={{
+                step: review.reviewersWithFeedback(selectedStep).length > 0,
+                all: review.reviewersWithFeedback().length > 0,
+              }}
               onDecision={review.decideStep}
               onTogglePlanEditor={() => setPlanEditorOpen((open) => !open)}
+              onRequestClearFeedback={setClearFeedbackScope}
             />
           </div>
           {planEditorOpen && reviewerId === workspace.authorId && (
@@ -476,6 +483,21 @@ export function ReviewWorkspace({
           >
             <Markdown className="explain-dialog-body" content={selectedStep.explanation} />
           </Dialog>
+        )}
+        {clearFeedbackScope && (
+          <ClearFeedbackDialog
+            scope={clearFeedbackScope}
+            stepTitle={selectedStep?.title}
+            reviewerNames={review
+              .reviewersWithFeedback(clearFeedbackScope === "step" ? selectedStep : undefined)
+              .map((id) => resolveMention(id)?.displayName ?? id)}
+            pending={review.pending}
+            onDismiss={() => setClearFeedbackScope(undefined)}
+            onConfirm={() => {
+              review.clearFeedback(clearFeedbackScope === "step" ? selectedStep : undefined);
+              setClearFeedbackScope(undefined);
+            }}
+          />
         )}
         {review.signOffOpen && (
           <SignOffDialog
