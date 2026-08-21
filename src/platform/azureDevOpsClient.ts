@@ -66,6 +66,8 @@ export interface PullRequestWorkspace {
   repositoryId: string;
   repositoryName: string;
   projectId?: string;
+  /** Only for building links people read: every call goes by id. */
+  projectName?: string;
   authorId: string;
   authorName: string;
   webUrl?: string;
@@ -188,6 +190,7 @@ export async function loadPullRequestWorkspace(
     repositoryId,
     repositoryName: pullRequest.repository.name,
     projectId,
+    projectName: pullRequest.repository.project?.name,
     authorId: pullRequest.createdBy.id,
     authorName: pullRequest.createdBy.displayName,
     webUrl: pullRequest._links?.web?.href as string | undefined,
@@ -352,7 +355,7 @@ export async function appendLedgerEvent(
 export async function setReviewerVote(
   workspace: PullRequestWorkspace,
   reviewerId: string,
-  vote: -10 | -5 | 0 | 10,
+  vote: -10 | -5 | 0 | 5 | 10,
 ): Promise<void> {
   await gitClient().createPullRequestReviewer(
     { id: reviewerId, vote } as IdentityRefWithVote,

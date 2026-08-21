@@ -14,6 +14,7 @@ import {
   setReviewerVote,
   type PullRequestWorkspace,
 } from "../platform/azureDevOpsClient";
+import type { PullRequestApproval } from "./SignOffDialog";
 import type { StepDecisionKind } from "./StepActions";
 import { usePendingAction } from "./usePendingAction";
 
@@ -42,7 +43,7 @@ export interface ReviewState {
   signOffOpen: boolean;
   setSignOffOpen: (open: boolean) => void;
   decideStep: (step: ReviewStep, decision: StepDecisionKind) => void;
-  approvePullRequest: () => void;
+  approvePullRequest: (approval: PullRequestApproval) => void;
   createPlan: () => void;
   /**
    * Reviewers with a decision on one step, or on any step when none is named.
@@ -108,7 +109,7 @@ export function useReviewState({
   // the classic UI, which writes no event), the sign-off is offered again.
   const signOffInEffect =
     reviewState.pullRequestDecisions.get(reviewerId) === "approved" &&
-    currentReviewerVote === 10;
+    (currentReviewerVote === 10 || currentReviewerVote === 5);
 
   // A pull request that is no longer active accepts no votes and no plan
   // changes, so every review action in the toolbar is closed.
@@ -165,17 +166,27 @@ export function useReviewState({
     }, "Unable to update this step.");
   };
 
-  const approvePullRequest = (): void => {
+  // Both sign-offs are the same `pr-approved` event: the distinction lives in the
+  // vote, which Azure DevOps already models, and adding a kind would make every
+  // installation still on an older build drop the approval as unknown.
+  const approvePullRequest = (approval: PullRequestApproval): void => {
+    const withSuggestions = approval === "approved-with-suggestions";
     void runAction(async () => {
-      await appendLedgerEvent(workspace, "✅ **Pull request approved**", {
-        eventId: crypto.randomUUID(),
-        kind: "pr-approved",
-        planId: plan.planId,
-        planVersion: plan.version,
-        planHash: plan.planHash,
-        iteration: workspace.iterationId,
-      });
-      await setReviewerVote(workspace, reviewerId, 10);
+      await appendLedgerEvent(
+        workspace,
+        withSuggestions
+          ? "✅ **Pull request approved with suggestions**"
+          : "✅ **Pull request approved**",
+        {
+          eventId: crypto.randomUUID(),
+          kind: "pr-approved",
+          planId: plan.planId,
+          planVersion: plan.version,
+          planHash: plan.planHash,
+          iteration: workspace.iterationId,
+        },
+      );
+      await setReviewerVote(workspace, reviewerId, withSuggestions ? 5 : 10);
       setSignOffOpen(false);
       await onRefresh();
     }, "Unable to approve the pull request.");

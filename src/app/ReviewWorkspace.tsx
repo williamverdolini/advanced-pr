@@ -47,7 +47,7 @@ import { useAsyncResource } from "./useAsyncResource";
 import { useCollapsedThreads } from "./useCollapsedThreads";
 import { useCommentAttachments } from "./useCommentAttachments";
 import { useDiffSelection } from "./useDiffSelection";
-import { useHostPathSync } from "./useHostPathSync";
+import { useHostLocationSync } from "./useHostLocationSync";
 import { useInlineDiff } from "./useInlineDiff";
 import { useMentionDirectory } from "./useMentionDirectory";
 import { useReviewState } from "./useReviewState";
@@ -74,6 +74,8 @@ export function ReviewWorkspace({
     workspace.plan.steps.find((step) => step.files.length > 0)?.stepId,
   );
   const [selectedThreadId, setSelectedThreadId] = React.useState<number>();
+  // What a share link pointed at, until the card has announced itself once.
+  const [linked, setLinked] = React.useState<{ threadId: number; commentId?: number }>();
   const [sideBySide, setSideBySide] = React.useState(false);
   const [draft, setDraft] = React.useState<DiffSelection>();
   const [explainExpanded, setExplainExpanded] = React.useState(false);
@@ -194,15 +196,20 @@ export function ReviewWorkspace({
     loading: diffLoading,
   } = useAsyncResource(loadDiff, "Unable to load this file.");
 
-  useHostPathSync({
+  useHostLocationSync({
     files: workspace.files,
     steps: workspace.plan.steps,
     selectedFile,
-    onRestore: (file, step) => {
+    onRestore: ({ file, step, threadId, commentId }) => {
       if (step) {
         setSelectedStepId(step.stepId);
       }
       setSelectedFile(file);
+      // Selecting it is what scrolls the diff to its line, once the file the
+      // link named has loaded; the highlight is what says which comment of that
+      // file the link was about.
+      setSelectedThreadId(threadId);
+      setLinked(threadId === undefined ? undefined : { threadId, commentId });
     },
   });
 
@@ -308,7 +315,15 @@ export function ReviewWorkspace({
             thread={thread}
             reviewerId={reviewerId}
             selected={selectedThreadId === thread.id}
+            highlightedCommentId={
+              // A link copied before the comment id was written into it still
+              // points somewhere: the comment that opened the discussion.
+              linked?.threadId === thread.id
+                ? linked.commentId ?? thread.comments[0]?.id
+                : undefined
+            }
             onSelect={setSelectedThreadId}
+            onHighlightShown={() => setLinked(undefined)}
             onCollapse={() => collapsed.setCollapsed(thread.id, true)}
             onRefresh={onRefresh}
           />
@@ -365,11 +380,6 @@ export function ReviewWorkspace({
               <MessageCard severity={MessageCardSeverity.Info}>
                 This pull request is {workspace.state}. Review actions are disabled; comments stay
                 readable.
-              </MessageCard>
-            )}
-            {!workspace.plan.sourceThreadId && reviewerId !== workspace.authorId && (
-              <MessageCard severity={MessageCardSeverity.Info}>
-                The pull request author must create the plan before step decisions can be recorded.
               </MessageCard>
             )}
           </header>

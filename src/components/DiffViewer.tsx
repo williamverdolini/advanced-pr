@@ -146,6 +146,14 @@ const noZones: readonly never[] = [];
  */
 const provisionalZoneHeight = 120;
 
+/**
+ * How long a requested line stays worth chasing while the view settles. Long
+ * enough to outlast the diff computation and the measurement of every comment
+ * zone on the file, short enough that scrolling away a moment later is never
+ * undone under the reader.
+ */
+const revealSettleWindow = 1500;
+
 export function DiffViewer<TZone extends DiffZoneAnchor>({
   original,
   modified,
@@ -181,6 +189,34 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
     right: new Map(),
   });
   const [zoneNodes, setZoneNodes] = React.useState<ReadonlyMap<string, HTMLElement>>(new Map());
+  /** The line still to be brought into view, and how long it stays worth chasing. */
+  const pendingRevealRef = React.useRef<{ target: DiffRevealTarget; until: number }>();
+
+  // Revealing a line once is not enough: the diff worker aligns the two sides
+  // after the models are set, and every comment zone only gets its real height
+  // once React has drawn it, so content below keeps moving for a moment. The
+  // target is re-applied on each of those shifts instead, which is what makes a
+  // link to a comment far down a long file actually land on it.
+  const applyPendingReveal = React.useCallback((): void => {
+    const pending = pendingRevealRef.current;
+    const editor = editorRef.current;
+    if (!pending || !editor) {
+      return;
+    }
+
+    if (Date.now() > pending.until) {
+      pendingRevealRef.current = undefined;
+      return;
+    }
+
+    const line = Math.max(1, pending.target.line);
+    const sideEditor = editor.sideEditor(pending.target.side);
+    // The comment is a view zone hanging under its line, and it is the comment
+    // that was asked for: scrolling to where the line ends puts the card itself
+    // at the top of the screen. `getBottomForLineNumber` is that offset — the
+    // lines and zones above it, without the zone that follows it.
+    sideEditor.setScrollTop(sideEditor.getBottomForLineNumber(line));
+  }, []);
 
   // Editor creation must happen exactly once: recreating it would drop every
   // mounted zone. Callbacks therefore travel through a ref instead of deps.
@@ -222,11 +258,13 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
 
     // The count is only known once the worker has run, and again after every
     // model change, so it is reported rather than read on demand.
-    const diffSubscription = editor.onDidUpdateDiff(() =>
-      callbacksRef.current.onDiffUpdated?.(editor.differenceCount()),
-    );
+    const diffSubscription = editor.onDidUpdateDiff(() => {
+      callbacksRef.current.onDiffUpdated?.(editor.differenceCount());
+      applyPendingReveal();
+    });
 
     const observer = new ResizeObserver((entries) => {
+      let resized = false;
       for (const entry of entries) {
         const mounted = measuredNodesRef.current.get(entry.target);
         if (!mounted) {
@@ -242,9 +280,14 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
 
         mounted.height = height;
         mounted.zone.heightInPx = height;
+        resized = true;
         editor.sideEditor(mounted.side).changeViewZones((accessor) =>
           accessor.layoutZone(mounted.zoneId),
         );
+      }
+
+      if (resized) {
+        applyPendingReveal();
       }
     });
     observerRef.current = observer;
@@ -372,7 +415,7 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
       editorRef.current = undefined;
       editor.dispose();
     };
-  }, [apiRef, singleFile, singleFileSide]);
+  }, [apiRef, applyPendingReveal, singleFile, singleFileSide]);
 
   React.useEffect(() => {
     editorRef.current?.setSideBySide(renderSideBySide);
@@ -454,16 +497,13 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
 
   React.useEffect(() => {
     if (!revealTarget) {
+      pendingRevealRef.current = undefined;
       return;
     }
 
-    const editor = editorRef.current;
-    if (!editor) {
-      return;
-    }
-
-    editor.sideEditor(revealTarget.side).revealLineInCenter(Math.max(1, revealTarget.line));
-  }, [revealTarget]);
+    pendingRevealRef.current = { target: revealTarget, until: Date.now() + revealSettleWindow };
+    applyPendingReveal();
+  }, [applyPendingReveal, revealTarget]);
 
   React.useEffect(() => {
     const editor = editorRef.current;

@@ -992,6 +992,39 @@ body,
   font-size: 0.8125rem;
 }
 
+.inline-comment-actions {
+  display: flex;
+  align-items: center;
+}
+
+/* Twice in a second: one flash reads as a rendering artefact, a slow fade reads
+   as a state. Two say "this one". The row is padded out so the colour reaches
+   past the text, which is otherwise a thin band across the middle of the card. */
+@keyframes inline-comment-linked {
+  0%,
+  50%,
+  100% {
+    background: transparent;
+  }
+
+  25%,
+  75% {
+    background: rgba(var(--palette-primary-tint-30, 199, 224, 244), 1);
+  }
+}
+
+.inline-comment-meta.linked {
+  margin: -4px -6px 0;
+  padding: 4px 6px 0;
+  animation: inline-comment-linked 1s ease-in-out;
+}
+
+.inline-comment-copied {
+  margin-left: 6px;
+  color: var(--communication-foreground, #0078d4);
+  white-space: nowrap;
+}
+
 /* Prose, unlike a row of a list, is read rather than scanned: it gets a size of
    its own instead of the 0.75rem the extension uses for its chrome. */
 .markdown-body {
@@ -1154,6 +1187,8 @@ body,
 .inline-thread-error {
   margin: 0;
   padding: 6px 10px;
+  /* A share link has no spaces to break on, so it would run past the card. */
+  overflow-wrap: anywhere;
   color: var(--status-error-text, rgba(218, 10, 0, 1));
   background: rgb(218 10 0 / 8%);
 }

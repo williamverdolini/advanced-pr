@@ -36,11 +36,13 @@ The `### Explain` block is optional and purely descriptive: it is shown above th
 
 **Related files hang off a file entry.** A bullet indented under another one is a file worth reading *beside* it, typically the test that covers it: the row shows a counter that expands into the related files, each of them openable, commentable and markable as viewed like any other. They are context, not work, so they never count towards the step's file total, and a related file still lands in `Everything else` unless some step lists it on a line of its own. Adding or rewriting them never invalidates an approval, for the same reason `### Explain` does not.
 
-**Puts comments inside the diff.** Threads render under the line they refer to, with reply, edit, like and resolve in place, and replying and resolving in one action. Markdown is rendered, with a live preview while writing, and the comment icon in the margin opens and closes each thread. An image pasted into a comment is uploaded as a pull request attachment and linked from the text, the way the native Files tab does it, so the screenshot is part of the discussion in both interfaces. The file tree lists threads under their file, so the same selection drives the tree, the margin and the editor.
+**Puts comments inside the diff.** Threads render under the line they refer to, with reply, edit, like, share and resolve in place, and replying and resolving in one action. Markdown is rendered, with a live preview while writing, and the comment icon in the margin opens and closes each thread. An image pasted into a comment is uploaded as a pull request attachment and linked from the text, the way the native Files tab does it, so the screenshot is part of the discussion in both interfaces. The file tree lists threads under their file, so the same selection drives the tree, the margin and the editor.
+
+**Links back to a comment.** Every comment carries a share icon, beside its author and date, which copies a link to the pull request with the Guided Review tab, the file, the thread and the comment in the query string. Whoever opens it lands on the right step and file, with the discussion scrolled to the top of the diff and the comment that was linked flashing once.
 
 **Renders a diff that reads like the native one.** Monaco, unified by default with a side-by-side switch, following the host's light or dark theme. Added and deleted files are shown as plain content instead of a diff against nothing; the tree marks each file as added, modified, deleted or renamed, and tracks which ones you have viewed.
 
-**Records approvals as comments.** Approving a step appends an event to a thread-ledger; a deterministic reducer rebuilds the review state from those comments on every load, which is why no database is needed. Approving the last step asks whether to approve the whole pull request, the only action that changes your Azure DevOps vote.
+**Records approvals as comments.** Approving a step appends an event to a thread-ledger; a deterministic reducer rebuilds the review state from those comments on every load, which is why no database is needed. Approving the last step asks whether to approve the whole pull request — as `Approved` or `Approved with suggestions` — the only action that changes your Azure DevOps vote.
 
 **Feedback on a step outlives the plan around it.** A step is identified by its title, so reordering the steps, revising which files a step lists, or rewriting its notes leaves every decision standing. Feedback stops counting in exactly three cases:
 
@@ -174,7 +176,7 @@ Test at least these, and verify every write in the standard Azure DevOps pull re
 3. Timeout and retry with the same event ID, producing no duplicate state.
 4. Comments anchored on both sides of the diff, still correct after another iteration.
 5. `Request changes` on several steps, checking that vote `-5` is not cleared too early.
-6. Sign-off after the last step, and after resetting a step.
+6. Sign-off after the last step, and after resetting a step, with both `Approve` (vote `10`) and `Approve with suggestions` (vote `5`).
 7. Added, renamed and deleted files, and more than one page of changes.
 8. Binary, very large and unsupported-encoding files.
 9. A pull request with 100+ changed files: navigation time and browser memory.

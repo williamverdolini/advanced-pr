@@ -4,13 +4,20 @@ import { MessageCard, MessageCardSeverity } from "azure-devops-ui/MessageCard";
 import { isGeneratedComment } from "../core/marker";
 import type { PullRequestWorkspace } from "../platform/azureDevOpsClient";
 
+/**
+ * Which of the two Azure DevOps approving votes the sign-off records. Both are
+ * offered as their own button rather than derived from the open threads: only
+ * the reviewer knows whether what they left behind is blocking.
+ */
+export type PullRequestApproval = "approved" | "approved-with-suggestions";
+
 export interface SignOffDialogProps {
   workspace: PullRequestWorkspace;
   reviewerId: string;
   currentVote?: number;
   pending: boolean;
   onDismiss: () => void;
-  onConfirm: () => void;
+  onConfirm: (approval: PullRequestApproval) => void;
 }
 
 /**
@@ -39,13 +46,28 @@ export function SignOffDialog({
       ),
   );
 
+  // The suggestion is the primary button when the reviewer left a thread open:
+  // it is the likelier intent there, and the plain approval stays one click away.
+  const suggestionsFirst = myOpenThreads.length > 0;
+
   return (
     <Dialog
       titleProps={{ text: "Approve pull request" }}
       onDismiss={onDismiss}
       footerButtonProps={[
         { text: "Cancel", disabled: pending, onClick: onDismiss },
-        { text: "Approve pull request", primary: true, disabled: pending, onClick: onConfirm },
+        {
+          text: "Approve with suggestions",
+          primary: suggestionsFirst,
+          disabled: pending,
+          onClick: () => onConfirm("approved-with-suggestions"),
+        },
+        {
+          text: "Approve",
+          primary: !suggestionsFirst,
+          disabled: pending,
+          onClick: () => onConfirm("approved"),
+        },
       ]}
     >
       <p>
@@ -54,7 +76,8 @@ export function SignOffDialog({
         {workspace.files.length === 1 ? "file" : "files"}.
       </p>
       <p>
-        Your vote on the pull request becomes <strong>Approved</strong>
+        Your vote on the pull request becomes <strong>Approved</strong> or{" "}
+        <strong>Approved with suggestions</strong>, depending on the button you choose
         {currentVote !== undefined && currentVote !== 0 && (
           <> (it is currently {describeVote(currentVote)})</>
         )}
@@ -63,7 +86,9 @@ export function SignOffDialog({
       {myOpenThreads.length > 0 && (
         <MessageCard severity={MessageCardSeverity.Warning}>
           {myOpenThreads.length} {myOpenThreads.length === 1 ? "thread" : "threads"} you took part
-          in {myOpenThreads.length === 1 ? "is" : "are"} still open. You can approve anyway.
+          in {myOpenThreads.length === 1 ? "is" : "are"} still open. Approve with suggestions to
+          leave {myOpenThreads.length === 1 ? "it" : "them"} on the record without blocking the
+          pull request.
         </MessageCard>
       )}
     </Dialog>
