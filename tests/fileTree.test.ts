@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  adjacentFile,
   buildFileTree,
   collectFiles,
   collectFolderPaths,
@@ -78,5 +79,28 @@ describe("file tree", () => {
 
     expect(nextFileToReview(files, allViewed)?.path).toBe("src/alpha.ts");
     expect(nextFileToReview([], new Set())).toBeUndefined();
+  });
+});
+
+describe("stepping through the files of a step", () => {
+  // Deliberately not in tree order: the command must follow what the reviewer
+  // sees, which is folders first and then files, both by name.
+  const files = [file("src/index.ts"), file("src/api/types.ts"), file("src/api/client.ts")];
+
+  it("walks the order the tree shows", () => {
+    expect(adjacentFile(files, "src/api/client.ts", "next")?.path).toBe("src/api/types.ts");
+    expect(adjacentFile(files, "src/api/types.ts", "next")?.path).toBe("src/index.ts");
+    expect(adjacentFile(files, "src/index.ts", "previous")?.path).toBe("src/api/types.ts");
+  });
+
+  it("stops at both ends instead of wrapping around", () => {
+    expect(adjacentFile(files, "src/api/client.ts", "previous")).toBeUndefined();
+    expect(adjacentFile(files, "src/index.ts", "next")).toBeUndefined();
+  });
+
+  it("treats no open file as being before the first one", () => {
+    expect(adjacentFile(files, undefined, "next")?.path).toBe("src/api/client.ts");
+    expect(adjacentFile(files, undefined, "previous")).toBeUndefined();
+    expect(adjacentFile(files, "gone.ts", "next")?.path).toBe("src/api/client.ts");
   });
 });

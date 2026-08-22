@@ -1,9 +1,11 @@
 import * as React from "react";
 import { ContentSize } from "azure-devops-ui/Callout";
 import { Card } from "azure-devops-ui/Card";
+import { Button } from "azure-devops-ui/Button";
 import { Dialog } from "azure-devops-ui/Dialog";
 import { TitleSize } from "azure-devops-ui/Header";
 import { MessageCard, MessageCardSeverity } from "azure-devops-ui/MessageCard";
+import { Panel } from "azure-devops-ui/Panel";
 import { Spinner } from "azure-devops-ui/Spinner";
 import {
   Splitter,
@@ -20,7 +22,7 @@ import { Markdown } from "../components/Markdown";
 import { AttachmentContext } from "../components/attachmentContext";
 import { MentionContext } from "../components/mentionContext";
 import { contentSideForChange, isContentOnlyChange } from "../core/changeType";
-import { fileNameFromPath, nextFileToReview } from "../core/fileTree";
+import { adjacentFile, fileNameFromPath, nextFileToReview } from "../core/fileTree";
 import type { InlineZoneDescriptor } from "../core/inlineZones";
 import type { ReviewStep } from "../core/reviewPlan";
 import { maxSplitterWidth, minSplitterWidth } from "../core/splitterWidth";
@@ -41,17 +43,20 @@ import { InlineThreadCard } from "./InlineThreadCard";
 import { PlanEditor } from "./PlanEditor";
 import { createPlanTemplate } from "./planTemplate";
 import { SignOffDialog } from "./SignOffDialog";
+import { StepSelector } from "./StepSelector";
 import { StepActions, type FeedbackScope } from "./StepActions";
 import { StepWizard } from "./StepWizard";
 import { useAsyncResource } from "./useAsyncResource";
 import { useCollapsedThreads } from "./useCollapsedThreads";
 import { useCommentAttachments } from "./useCommentAttachments";
 import { useDiffSelection } from "./useDiffSelection";
-import { useHostPathSync } from "./useHostPathSync";
+import { useHostFullScreen } from "./useHostFullScreen";
+import { useHostLocationSync } from "./useHostLocationSync";
 import { useInlineDiff } from "./useInlineDiff";
 import { useMentionDirectory } from "./useMentionDirectory";
 import { useReviewState } from "./useReviewState";
 import { useViewedFiles } from "./useViewedFiles";
+import { useViewport } from "./useViewport";
 
 export interface ReviewWorkspaceProps {
   workspace: PullRequestWorkspace;
@@ -74,12 +79,20 @@ export function ReviewWorkspace({
     workspace.plan.steps.find((step) => step.files.length > 0)?.stepId,
   );
   const [selectedThreadId, setSelectedThreadId] = React.useState<number>();
+  // What a share link pointed at, until the card has announced itself once.
+  const [linked, setLinked] = React.useState<{ threadId: number; commentId?: number }>();
   const [sideBySide, setSideBySide] = React.useState(false);
   const [draft, setDraft] = React.useState<DiffSelection>();
   const [explainExpanded, setExplainExpanded] = React.useState(false);
   const [clearFeedbackScope, setClearFeedbackScope] = React.useState<FeedbackScope>();
   const [planEditorOpen, setPlanEditorOpen] = React.useState(false);
   const [planDraft, setPlanDraft] = React.useState(() => createPlanTemplate(workspace));
+  const viewport = useViewport();
+  const hostFullScreen = useHostFullScreen();
+  // On a narrow screen the tree is a panel over the diff rather than a pane
+  // beside it. It starts open because the alternative first screen is the empty
+  // "Select a file", which on a phone is a dead end.
+  const [filesOpen, setFilesOpen] = React.useState(viewport.narrow);
   // Read once, on mount: the Splitter owns its width from there on, and feeding
   // it back a value it already applied would fight the drag in progress.
   const [initialSplitterWidth] = React.useState(loadSplitterWidth);
@@ -107,7 +120,9 @@ export function ReviewWorkspace({
   // no sides to lay out and the one side it has is the one on screen.
   const contentOnly = selectedFile ? isContentOnlyChange(selectedFile.changeKind) : false;
   const contentSide = selectedFile ? contentSideForChange(selectedFile.changeKind) : "right";
-  const splitView = sideBySide && !contentOnly;
+  // Two columns of code do not fit on a narrow screen, whatever the switch says,
+  // and the switch itself is hidden there.
+  const splitView = sideBySide && !contentOnly && !viewport.narrow;
 
   // Memoized only where identity matters: each of these feeds a dependency
   // array, another memo, or a component that would otherwise rebuild. The plain
@@ -182,6 +197,8 @@ export function ReviewWorkspace({
   });
 
   const { viewedFiles, setFilesViewed } = useViewedFiles(viewedScope);
+  const previousFile = adjacentFile(visibleFiles, selectedFile?.path, "previous");
+  const nextFile = adjacentFile(visibleFiles, selectedFile?.path, "next");
   const visibleViewedCount = visibleFiles.filter((file) => viewedFiles.has(file.path)).length;
 
   const loadDiff = React.useMemo(
@@ -194,15 +211,20 @@ export function ReviewWorkspace({
     loading: diffLoading,
   } = useAsyncResource(loadDiff, "Unable to load this file.");
 
-  useHostPathSync({
+  useHostLocationSync({
     files: workspace.files,
     steps: workspace.plan.steps,
     selectedFile,
-    onRestore: (file, step) => {
+    onRestore: ({ file, step, threadId, commentId }) => {
       if (step) {
         setSelectedStepId(step.stepId);
       }
       setSelectedFile(file);
+      // Selecting it is what scrolls the diff to its line, once the file the
+      // link named has loaded; the highlight is what says which comment of that
+      // file the link was about.
+      setSelectedThreadId(threadId);
+      setLinked(threadId === undefined ? undefined : { threadId, commentId });
     },
   });
 
@@ -218,7 +240,13 @@ export function ReviewWorkspace({
     );
   };
 
-  const diffApiRef = React.useRef<DiffViewerApi>();
+  // State rather than a ref: the toolbar that drives these commands is built
+  // while rendering, and a ref must not be read there.
+  const [diffApi, setDiffApi] = React.useState<DiffViewerApi>();
+  const goToDifference = React.useCallback(
+    (direction: "next" | "previous"): void => diffApi?.goToDiff(direction),
+    [diffApi],
+  );
   // Reported by Monaco once it has compared the two sides, and reset per file
   // so the arrows are never enabled against a diff that is not there yet.
   const [differenceCount, setDifferenceCount] = React.useState(0);
@@ -235,6 +263,7 @@ export function ReviewWorkspace({
       setSelectedFile(file);
       setSelectedThreadId(undefined);
       setDraft(undefined);
+      setFilesOpen(false);
       selection.clear();
     },
     [selection],
@@ -246,6 +275,7 @@ export function ReviewWorkspace({
     (file: ChangedFile, thread: ReviewThread): void => {
       setSelectedFile(file);
       setSelectedThreadId(thread.id);
+      setFilesOpen(false);
       collapsed.setCollapsed(thread.id, false);
     },
     [collapsed],
@@ -308,7 +338,15 @@ export function ReviewWorkspace({
             thread={thread}
             reviewerId={reviewerId}
             selected={selectedThreadId === thread.id}
+            highlightedCommentId={
+              // A link copied before the comment id was written into it still
+              // points somewhere: the comment that opened the discussion.
+              linked?.threadId === thread.id
+                ? linked.commentId ?? thread.comments[0]?.id
+                : undefined
+            }
             onSelect={setSelectedThreadId}
+            onHighlightShown={() => setLinked(undefined)}
             onCollapse={() => collapsed.setCollapsed(thread.id, true)}
             onRefresh={onRefresh}
           />
@@ -317,6 +355,123 @@ export function ReviewWorkspace({
     );
   };
 
+  const explainPanel = selectedStep?.explanation ? (
+    <ExplainPanel
+      stepTitle={selectedStep.title}
+      explanation={selectedStep.explanation}
+      onExpand={() => setExplainExpanded(true)}
+    />
+  ) : undefined;
+
+  const fileTree = (
+    <FileTree
+      key={selectedStep?.stepId ?? "all-files"}
+      files={visibleFiles}
+      viewedFiles={viewedFiles}
+      selectedFile={selectedFile}
+      selectedThreadId={selectedThreadId}
+      threadsByFile={threadsByFile}
+      relatedFilesByPath={relatedFilesByPath}
+      onSelectFile={selectFile}
+      onSelectThread={selectThread}
+      onSetViewed={setFilesViewed}
+    />
+  );
+
+  const filesColumn = (
+    <div className="files-column">
+      {explainPanel}
+      <Card
+        className="files-pane"
+        titleProps={{
+          text: `Changed files (${visibleViewedCount}/${visibleFiles.length})`,
+          size: TitleSize.Medium,
+        }}
+      >
+        {fileTree}
+      </Card>
+    </div>
+  );
+
+  // The same content without the card around it: inside the panel the count is
+  // already in the panel's own header, and a second title under it is noise.
+  const filesDrawer = (
+    <div className="files-drawer">
+      {explainPanel}
+      {fileTree}
+    </div>
+  );
+
+  const renderDiffCard = (): React.ReactElement => (
+    <Card
+      className="diff-pane"
+      // Name on the title line, folder underneath: the full path of a
+      // deeply nested file would push the commands off the header.
+      titleProps={{
+        text: selectedFile ? fileNameFromPath(selectedFile.path) : "Diff",
+        size: TitleSize.Small,
+        // Struck through when the file is gone: it says the same as the line of
+        // prose that used to sit in the command bar, in none of the width.
+        className:
+          selectedFile?.changeKind === "delete" ? "diff-title deleted" : "diff-title",
+      }}
+      headerDescriptionProps={
+        selectedFile
+          ? { text: selectedFile.path, className: "diff-title-path" }
+          : undefined
+      }
+      headerCommandBarItems={
+        selectedFile
+          ? buildDiffCommands({
+              contentOnly,
+              sideBySide,
+              // The layout switch is pointless where only one layout fits.
+              layoutSwitch: !viewport.narrow,
+              differenceCount,
+              viewed: viewedFiles.has(selectedFile.path),
+              onViewedChange: (viewed) => setFilesViewed([selectedFile.path], viewed),
+              onSideBySideChange: setSideBySide,
+              onGoToDifference: goToDifference,
+            })
+          : undefined
+      }
+    >
+      {!selectedFile && <p className="empty-pane">Select a file to view its diff.</p>}
+      {diffLoading && <Spinner label="Loading file" />}
+      {diffError && (
+        <MessageCard severity={MessageCardSeverity.Warning}>{diffError}</MessageCard>
+      )}
+      {inlineDiff.hiddenThreadCount > 0 && (
+        <MessageCard severity={MessageCardSeverity.Info}>
+          {inlineDiff.hiddenThreadCount} more comments on this file are listed in the tree
+          but not shown inline.
+        </MessageCard>
+      )}
+      {selectedFile && diff && (
+        <DiffViewer
+          original={diff.original}
+          modified={diff.modified}
+          language={diff.language}
+          filePath={selectedFile.path}
+          zones={inlineDiff.zones}
+          renderZone={renderZone}
+          renderSideBySide={splitView}
+      wordWrap={viewport.narrow}
+          singleFile={contentOnly}
+          singleFileSide={contentSide}
+          threadDecorations={inlineDiff.threadDecorations}
+          selectedThreadId={selectedThreadId}
+          revealTarget={inlineDiff.revealTarget}
+          onSelectionChange={selection.track}
+          onSelectThread={toggleThreadFromGlyph}
+          onRequestComment={requestComment}
+          onApiReady={setDiffApi}
+          onDiffUpdated={setDifferenceCount}
+        />
+      )}
+    </Card>
+  );
+
   return (
     <MentionContext.Provider value={resolveMention}>
       <AttachmentContext.Provider value={attachments}>
@@ -324,31 +479,97 @@ export function ReviewWorkspace({
           {/* Title, branches and counters live in the Azure DevOps header that
               embeds this iframe: repeating them here would only cost height. */}
           <header className="review-header">
+            {/* Two rows on a narrow screen, one on a wide one, from the same
+                markup: the steps take the width they can get, the commands stay
+                together. */}
             <div className="review-toolbar">
-              <StepWizard
-                steps={review.displayedSteps}
-                selectedStepId={selectedStep?.stepId}
-                statuses={review.reviewerSteps}
-                decisions={review.stepDecisions}
-                reviewerId={reviewerId}
-                viewedFiles={viewedFiles}
-                onSelect={selectStep}
-              />
-              <StepActions
-                step={selectedStep}
-                status={selectedStepStatus}
-                pending={review.pending}
-                reviewClosed={review.reviewClosed}
-                isAuthor={reviewerId === workspace.authorId}
-                planExists={Boolean(workspace.plan.sourceThreadId)}
-                clearableFeedback={{
-                  step: review.reviewersWithFeedback(selectedStep).length > 0,
-                  all: review.reviewersWithFeedback().length > 0,
-                }}
-                onDecision={review.decideStep}
-                onTogglePlanEditor={() => setPlanEditorOpen((open) => !open)}
-                onRequestClearFeedback={setClearFeedbackScope}
-              />
+              {/* The step and what to decide about it on one line, the controls
+                  for looking at it on the next. Side by side while there is
+                  width for both, stacked when there is not. */}
+              <div className="toolbar-step">
+                {viewport.narrow ? (
+                  <StepSelector
+                    steps={review.displayedSteps}
+                    selectedStepId={selectedStep?.stepId}
+                    statuses={review.reviewerSteps}
+                    viewedFiles={viewedFiles}
+                    onSelect={selectStep}
+                  />
+                ) : (
+                  <StepWizard
+                    steps={review.displayedSteps}
+                    selectedStepId={selectedStep?.stepId}
+                    statuses={review.reviewerSteps}
+                    decisions={review.stepDecisions}
+                    reviewerId={reviewerId}
+                    viewedFiles={viewedFiles}
+                    onSelect={selectStep}
+                  />
+                )}
+                <StepActions
+                  step={selectedStep}
+                  status={selectedStepStatus}
+                  pending={review.pending}
+                  reviewClosed={review.reviewClosed}
+                  isAuthor={reviewerId === workspace.authorId}
+                  planExists={Boolean(workspace.plan.sourceThreadId)}
+                  clearableFeedback={{
+                    step: review.reviewersWithFeedback(selectedStep).length > 0,
+                    all: review.reviewersWithFeedback().length > 0,
+                  }}
+                  onDecision={review.decideStep}
+                  onTogglePlanEditor={() => setPlanEditorOpen((open) => !open)}
+                  onRequestClearFeedback={setClearFeedbackScope}
+                />
+              </div>
+              <div className="toolbar-view">
+                {/* The host's full screen, not the browser's: it hides the pull
+                    request chrome and hands this iframe the page. On a phone the
+                    tab is a few hundred pixels tall, which is the difference
+                    between reading a diff and not reading it. */}
+                <Button
+                  subtle
+                  iconProps={{
+                    iconName: hostFullScreen.fullScreen ? "BackToWindow" : "FullScreen",
+                  }}
+                  ariaLabel={hostFullScreen.fullScreen ? "Leave full screen" : "Go full screen"}
+                  tooltipProps={{
+                    text: hostFullScreen.fullScreen ? "Leave full screen" : "Full screen",
+                  }}
+                  onClick={hostFullScreen.toggle}
+                />
+                {/* Only where the tree is behind a panel: with the tree on screen
+                    the next file is one click away in it, and these would be a
+                    second way to do the same thing. */}
+                {viewport.narrow && (
+                  <>
+                    <Button
+                      subtle
+                      iconProps={{ iconName: "FileCode" }}
+                      text={`${visibleViewedCount}/${visibleFiles.length}`}
+                      ariaLabel="Show the changed files"
+                      tooltipProps={{ text: "Changed files" }}
+                      onClick={() => setFilesOpen(true)}
+                    />
+                    <Button
+                      subtle
+                      iconProps={{ iconName: "ChevronLeft" }}
+                      ariaLabel="Previous file in this step"
+                      tooltipProps={{ text: "Previous file" }}
+                      disabled={!previousFile}
+                      onClick={() => previousFile && selectFile(previousFile)}
+                    />
+                    <Button
+                      subtle
+                      iconProps={{ iconName: "ChevronRight" }}
+                      ariaLabel="Next file in this step"
+                      tooltipProps={{ text: "Next file" }}
+                      disabled={!nextFile}
+                      onClick={() => nextFile && selectFile(nextFile)}
+                    />
+                  </>
+                )}
+              </div>
             </div>
             {planEditorOpen && reviewerId === workspace.authorId && (
               <PlanEditor
@@ -367,121 +588,37 @@ export function ReviewWorkspace({
                 readable.
               </MessageCard>
             )}
-            {!workspace.plan.sourceThreadId && reviewerId !== workspace.authorId && (
-              <MessageCard severity={MessageCardSeverity.Info}>
-                The pull request author must create the plan before step decisions can be recorded.
-              </MessageCard>
-            )}
           </header>
           {review.error && (
             <MessageCard severity={MessageCardSeverity.Error}>{review.error}</MessageCard>
           )}
-          <Splitter
-            className="review-workspace"
-            ariaLabel="Files splitter"
-            splitterDirection={SplitterDirection.Vertical}
-            fixedElement={SplitterElementPosition.Near}
-            initialFixedSize={initialSplitterWidth}
-            minFixedSize={minSplitterWidth}
-            maxFixedSize={maxSplitterWidth}
-            onFixedSizeChanged={saveSplitterWidth}
-            nearElementClassName="workspace-pane"
-            farElementClassName="workspace-pane"
-            onRenderNearElement={() => (
-              <div className="files-column">
-                {selectedStep?.explanation && (
-                  <ExplainPanel
-                    stepTitle={selectedStep.title}
-                    explanation={selectedStep.explanation}
-                    onExpand={() => setExplainExpanded(true)}
-                  />
-                )}
-                <Card
-                  className="files-pane"
-                  titleProps={{
-                    text: `Changed files (${visibleViewedCount}/${visibleFiles.length})`,
-                    size: TitleSize.Medium,
-                  }}
-                >
-                  <FileTree
-                    key={selectedStep?.stepId ?? "all-files"}
-                    files={visibleFiles}
-                    viewedFiles={viewedFiles}
-                    selectedFile={selectedFile}
-                    selectedThreadId={selectedThreadId}
-                    threadsByFile={threadsByFile}
-                    relatedFilesByPath={relatedFilesByPath}
-                    onSelectFile={selectFile}
-                    onSelectThread={selectThread}
-                    onSetViewed={setFilesViewed}
-                  />
-                </Card>
-              </div>
-            )}
-            onRenderFarElement={() => (
-              <Card
-                className="diff-pane"
-                // Name on the title line, folder underneath: the full path of a
-                // deeply nested file would push the commands off the header.
-                titleProps={{
-                  text: selectedFile ? fileNameFromPath(selectedFile.path) : "Diff",
-                  size: TitleSize.Small,
-                  className: "diff-title",
-                }}
-                headerDescriptionProps={
-                  selectedFile
-                    ? { text: selectedFile.path, className: "diff-title-path" }
-                    : undefined
-                }
-                headerCommandBarItems={
-                  selectedFile
-                    ? buildDiffCommands({
-                        contentOnly,
-                        contentSide,
-                        sideBySide,
-                        differenceCount,
-                        onSideBySideChange: setSideBySide,
-                        onGoToDifference: (direction) =>
-                          diffApiRef.current?.goToDiff(direction),
-                      })
-                    : undefined
-                }
-              >
-                {!selectedFile && <p className="empty-pane">Select a file to view its diff.</p>}
-                {diffLoading && <Spinner label="Loading file" />}
-                {diffError && (
-                  <MessageCard severity={MessageCardSeverity.Warning}>{diffError}</MessageCard>
-                )}
-                {inlineDiff.hiddenThreadCount > 0 && (
-                  <MessageCard severity={MessageCardSeverity.Info}>
-                    {inlineDiff.hiddenThreadCount} more comments on this file are listed in the tree
-                    but not shown inline.
-                  </MessageCard>
-                )}
-                {selectedFile && diff && (
-                  <DiffViewer
-                    original={diff.original}
-                    modified={diff.modified}
-                    language={diff.language}
-                    filePath={selectedFile.path}
-                    zones={inlineDiff.zones}
-                    renderZone={renderZone}
-                    renderSideBySide={splitView}
-                    singleFile={contentOnly}
-                    singleFileSide={contentSide}
-                    threadDecorations={inlineDiff.threadDecorations}
-                    selectedThreadId={selectedThreadId}
-                    revealTarget={inlineDiff.revealTarget}
-                    onSelectionChange={selection.track}
-                    onSelectThread={toggleThreadFromGlyph}
-                    onRequestComment={requestComment}
-                    apiRef={diffApiRef}
-                    onDiffUpdated={setDifferenceCount}
-                  />
-                )}
-              </Card>
-            )}
-          />
+          {viewport.narrow ? (
+            <div className="review-workspace narrow">{renderDiffCard()}</div>
+          ) : (
+            <Splitter
+              className="review-workspace"
+              ariaLabel="Files splitter"
+              splitterDirection={SplitterDirection.Vertical}
+              fixedElement={SplitterElementPosition.Near}
+              initialFixedSize={initialSplitterWidth}
+              minFixedSize={minSplitterWidth}
+              maxFixedSize={maxSplitterWidth}
+              onFixedSizeChanged={saveSplitterWidth}
+              nearElementClassName="workspace-pane"
+              farElementClassName="workspace-pane"
+              onRenderNearElement={() => filesColumn}
+              onRenderFarElement={renderDiffCard}
+            />
+          )}
+          {viewport.narrow && filesOpen && (
+            <Panel
+              className="files-panel"
+              titleProps={{ text: `Changed files (${visibleViewedCount}/${visibleFiles.length})` }}
+              onDismiss={() => setFilesOpen(false)}
+            >
+              {filesDrawer}
+            </Panel>
+          )}
           {explainExpanded && selectedStep?.explanation && (
             <Dialog
               titleProps={{ text: `Explain: ${selectedStep.title}` }}

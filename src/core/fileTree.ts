@@ -81,6 +81,27 @@ export function nextFileToReview<TFile extends { path: string }>(
   return ordered.find((file) => !viewed.has(file.path)) ?? ordered[0];
 }
 
+/**
+ * The file before or after another in the order the tree shows them. It is what
+ * a "previous/next file" command steps through, and it walks the same order the
+ * reviewer sees rather than the order the API returned. Undefined at either end:
+ * the step is a list, not a carousel, and wrapping around hides that it ended.
+ */
+export function adjacentFile<TFile extends { path: string }>(
+  files: readonly TFile[],
+  path: string | undefined,
+  direction: "previous" | "next",
+): TFile | undefined {
+  const ordered = collectFiles(buildFileTree(files));
+  const current = path ? ordered.findIndex((file) => file.path === path) : -1;
+  // Nothing open yet: only "next" means something, and it means the first file.
+  if (current < 0) {
+    return direction === "next" ? ordered[0] : undefined;
+  }
+
+  return ordered[current + (direction === "next" ? 1 : -1)];
+}
+
 export function collectFolderPaths<TFile extends { path: string }>(
   nodes: readonly FileTreeNode<TFile>[],
 ): string[] {

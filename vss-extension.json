@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "advanced-pr",
   "publisher": "NebulaImprover",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "name": "Advanced PR Review",
   "description": "Review large pull requests in explicit steps, with comments inline in the diff.",
   "public": false,

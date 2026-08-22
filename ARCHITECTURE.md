@@ -40,6 +40,7 @@ except `hash.ts` (asserted through `reviewPlan`'s tests, which depend on it).
 | `mentionQuery.ts`, `mentionText.ts` | Typeahead query detection; conversion between stored `@<id>` tokens and display text |
 | `fileTree.ts` | Flat paths to a folder tree; the file name of a path |
 | `threadIndex.ts` | Threads grouped by file, ordered by line |
+| `shareLink.ts` | The link back to one comment: pull request page, tab, file and thread |
 | `changeType.ts` | Azure DevOps change bitmask to `add`/`edit`/`delete`/`rename`, and which diff side to show |
 | `viewedFiles.ts` | Reconciles viewed marks against blob revisions, so a new push clears the stale ones |
 | `toggleSet.ts` | Immutable membership updates for the `ReadonlySet` values held in React state |
@@ -58,8 +59,12 @@ injection* below).
 | `identityService.ts` | The host's identity picker, for mentions. Caches every identity it has seen |
 | `viewedFilesStore.ts` | Per-user viewed marks, in the extension data service |
 | `splitterWidthStore.ts` | The files pane's width, in the browser's local storage |
-| `hostNavigation.ts` | Reads and writes the host's `path` query parameter |
+| `hostNavigation.ts` | Reads and writes the host's `path` and `threadId` query parameters |
+| `clipboard.ts` | Copies text, with the fallback the sandboxed iframe sometimes needs |
+| `pullRequestUrl.ts` | The pull request's own page, from the API link or rebuilt from the host |
 | `hostTheme.ts` | Observes the host's light or dark theme |
+| `viewport.ts` | Observes screen width and pointer type: narrow layout, coarse pointer |
+| `hostLayout.ts` | The host's full-screen mode, read and toggled |
 
 **`src/components/`** — `DiffViewer` (Monaco, view zones, decorations),
 `FileTree`, `Markdown`, `MarkdownCommentEditor`, `MentionTypeahead`, plus
@@ -86,7 +91,9 @@ to "a service per concern":
 | `useViewedFiles` | The viewed marks, loaded and persisted |
 | `useMentionDirectory` | Resolving a mention id to a name |
 | `useCommentAttachments` | Uploading an image pasted into a comment, and the object URLs the rendered ones are shown from |
-| `useHostPathSync` | The open file, to and from the host's `path` parameter |
+| `useHostLocationSync` | The open file, to and from the host's `path` parameter, and the `threadId` a share link arrives with |
+| `useViewport` | The screen shape, so the layout can switch between panes and a panel |
+| `useHostFullScreen` | Whether the host is in full screen, and the toggle |
 | `useCollapsedThreads`, `useDiffSelection` | Two small pieces of diff UI state |
 
 Reach for `useAsyncResource` and `usePendingAction` rather than writing the
@@ -118,7 +125,8 @@ container grows a new concern, give it a hook before giving it more `useState`.
    from the ledger comments, which is why the extension needs no database.
 4. **UI state** — `useState` in `App.tsx`, and lost on reload by design, except
    the open file (kept in the host's `path` query parameter) and the viewed marks
-   (kept in the extension data service).
+   (kept in the extension data service). A shared comment link adds `threadId`,
+   read once on arrival.
 
 ## Constraints that explain the design
 

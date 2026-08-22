@@ -1,10 +1,11 @@
 {
   "name": "advanced-pr",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host localhost",
+    "dev:lan": "vite --host",
     "dev:watch": "vite --host localhost",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

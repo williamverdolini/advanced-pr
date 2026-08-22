@@ -80,3 +80,16 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
+
+/**
+ * Contribution id of this tab, `publisher.extension.contribution`, which is the
+ * value the host reads from `_a` to decide which tab to open. Outside a host
+ * there is no SDK to ask, and no link worth building either.
+ */
+export function getTabContributionId(): string | undefined {
+  try {
+    return SDK.getContributionId();
+  } catch {
+    return undefined;
+  }
+}

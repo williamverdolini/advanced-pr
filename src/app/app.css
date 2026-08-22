@@ -94,6 +94,24 @@ body,
   min-width: 0;
 }
 
+/* The two halves of the toolbar: the step with its decision, then the controls
+   for looking at it. One row while there is width for both, two when there is
+   not, from the same markup. */
+.toolbar-step {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.toolbar-view {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
 /* Titles are shown in full while the bar has room and only shrink when it runs
    out, so no width is capped up front. Wrapping is off for the same reason:
    wrapped steps would take the height back instead of using the width. When
@@ -726,11 +744,19 @@ body,
   overflow-wrap: anywhere;
 }
 
-.diff-toolbar-note {
+
+/* Same treatment as a deleted file in the tree, for the same reason: it reads as
+   gone without having to be told so in words. */
+.diff-title.deleted {
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  text-decoration: line-through;
+}
+
+/* Sits on the command bar's line with the rest of the file commands, which are
+   buttons: the checkbox brings its own baseline and has to be pulled onto it. */
+.diff-toolbar-viewed {
   align-self: center;
   margin-right: 8px;
-  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
-  font-size: 0.75rem;
 }
 
 .file-tree-folder {
@@ -929,6 +955,16 @@ body,
   gap: 6px;
 }
 
+/* Grid and flex children default to `min-width: auto`, which is "never narrower
+   than my contents": inside a zone as wide as the editor's content area, that is
+   how a card ends up wider than the space it has. */
+.inline-zone-stack > *,
+.inline-composer,
+.markdown-editor,
+.markdown-editor .bolt-textfield {
+  min-width: 0;
+}
+
 .inline-zone-caption {
   margin: 0;
   color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
@@ -953,6 +989,9 @@ body,
 
 .inline-thread > header {
   display: flex;
+  /* Wrapping rather than overflowing: the zone clips what does not fit, so a
+     row that cannot shrink loses its last button instead of showing it. */
+  flex-wrap: wrap;
   align-items: center;
   gap: 7px;
   min-height: 30px;
@@ -981,6 +1020,7 @@ body,
 
 .inline-comment-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
   color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
@@ -990,6 +1030,39 @@ body,
 .inline-comment-meta strong {
   color: var(--text-primary-color, rgba(0, 0, 0, 0.9));
   font-size: 0.8125rem;
+}
+
+.inline-comment-actions {
+  display: flex;
+  align-items: center;
+}
+
+/* Twice in a second: one flash reads as a rendering artefact, a slow fade reads
+   as a state. Two say "this one". The row is padded out so the colour reaches
+   past the text, which is otherwise a thin band across the middle of the card. */
+@keyframes inline-comment-linked {
+  0%,
+  50%,
+  100% {
+    background: transparent;
+  }
+
+  25%,
+  75% {
+    background: rgba(var(--palette-primary-tint-30, 199, 224, 244), 1);
+  }
+}
+
+.inline-comment-meta.linked {
+  margin: -4px -6px 0;
+  padding: 4px 6px 0;
+  animation: inline-comment-linked 1s ease-in-out;
+}
+
+.inline-comment-copied {
+  margin-left: 6px;
+  color: var(--communication-foreground, #0078d4);
+  white-space: nowrap;
 }
 
 /* Prose, unlike a row of a list, is read rather than scanned: it gets a size of
@@ -1154,12 +1227,15 @@ body,
 .inline-thread-error {
   margin: 0;
   padding: 6px 10px;
+  /* A share link has no spaces to break on, so it would run past the card. */
+  overflow-wrap: anywhere;
   color: var(--status-error-text, rgba(218, 10, 0, 1));
   background: rgb(218 10 0 / 8%);
 }
 
 .inline-thread-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 6px 10px;
   border-top: 1px solid rgba(var(--palette-neutral-8, 234, 234, 234), 1);
@@ -1194,6 +1270,11 @@ body,
 
 .markdown-actions {
   display: flex;
+  /* Three buttons that the library forbids to shrink: without wrapping, their
+     combined width becomes the smallest the editor can be, and inside a view
+     zone a few hundred pixels wide that is what pushed the composer past the
+     edge and had it clipped. */
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -1248,32 +1329,159 @@ body,
     margin-bottom: 10px;
   }
 
+  .toolbar-plan-editor {
+    grid-template-columns: 1fr;
+  }
+
+}
+
+/* Narrow layout: the tree cannot share the width with the diff, so it moves into
+   a panel over it and the diff takes the whole pane. The height stays pinned to
+   the iframe rather than growing with the content: the host sizes the frame and
+   does not scroll it, so a document taller than the frame is a document with a
+   cut-off bottom and no way to reach it. */
+@media (max-width: 860px) {
+  /* Two rows: the step menu on its own, every command on the next. Each button
+     kept to its content, so the row holds the decisions, full screen, the file
+     arrows and the file count instead of one control per line. */
   .review-toolbar {
     align-items: stretch;
     flex-direction: column;
+    gap: 6px;
+  }
+
+  .toolbar-view {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .toolbar-step {
+    gap: 6px;
+  }
+
+  /* The status mark is the point of the button: it holds its size while the
+     title is trimmed, like the icons on the other side of the row. */
+  .toolbar-step .step-selector .left-icon {
+    flex: 0 0 auto;
+  }
+
+  /* Half the row each. Both labels are as long as the review makes them — a step
+     title on one side, "Changes requested" on the other — so neither is allowed
+     to take the width it wants: they would overlap, and the one that loses is
+     whichever renders second. */
+  .toolbar-step .step-selector,
+  .toolbar-step .toolbar-actions {
+    flex: 1 1 50%;
+    min-width: 0;
+    max-width: 50%;
+  }
+
+  /* It wraps by default, which here would put the decision under the step menu
+     instead of trimming it. */
+  .toolbar-step .toolbar-actions {
+    flex-wrap: nowrap;
+  }
+
+  /* Every wrapper down to the label has to give up its intrinsic width, or the
+     text refuses to shrink and overflows instead of ending in an ellipsis. The
+     library pins its buttons to `flex-shrink: 0`, which is what made them run
+     over each other rather than trim: `min-width` alone changes nothing while a
+     flex item is forbidden to shrink at all. */
+  .toolbar-step .bolt-button,
+  .toolbar-step .bolt-split-button,
+  .toolbar-step .bolt-split-button-main {
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  .toolbar-step .bolt-button-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Nothing to trim in an icon: the "..." and the dropdown arrow keep their size
+     and the label beside them gives up the width instead. Both of them are a
+     wrapper around the button, so the wrapper is held too — shrinking that
+     would clip the icon just the same. */
+  .toolbar-step .bolt-button.icon-only,
+  .toolbar-step .bolt-split-button-option,
+  .toolbar-step .toolbar-actions > .bolt-expandable-button {
+    flex: 0 0 auto;
+    min-width: auto;
   }
 
   .toolbar-actions {
     justify-content: flex-start;
   }
 
-  .toolbar-plan-editor {
-    grid-template-columns: 1fr;
+  /* The zone is as wide as the editor's content area, which on a phone is a few
+     hundred pixels: the indent that lines a comment up with the code costs more
+     than it explains. What still does not fit scrolls sideways instead of being
+     clipped — safe here because the wrapped diff never scrolls horizontally, so
+     the zone is not being pinned against a moving viewport. */
+  /* The library wraps a card header under 600px, which drops the file commands
+     onto a line of their own. They belong beside the name they act on: the name
+     is what gives up width here, and it already ends in an ellipsis. */
+  .diff-pane .bolt-header-content-area {
+    flex-wrap: nowrap;
   }
 
-  .file-tree {
-    height: auto;
-    max-height: 320px;
+  .diff-pane .bolt-header-title-area {
+    min-width: 0;
   }
 
-  html,
-  body,
-  #root,
-  .app-shell,
-  .app-content,
-  .workspace-shell {
+  .diff-pane .bolt-header-commandbar {
+    flex: 0 0 auto;
+  }
+
+  .advanced-pr-zone {
+    overflow-x: auto;
+  }
+
+  .advanced-pr-zone-content {
+    padding: 4px 6px 8px 8px;
+  }
+
+  .review-workspace.narrow {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .review-workspace.narrow .diff-pane {
+    width: 100%;
+  }
+
+  .step-selector {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .files-drawer {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    height: 100%;
+    min-height: 0;
+    overflow: auto;
+  }
+
+  /* The panel's own header already carries the file count. */
+  .files-panel .files-drawer .file-tree {
     height: auto;
-    overflow: visible;
+    min-height: 0;
+  }
+}
+
+/* No hover to fall back on, and a finger is not a pointer: the icon buttons in a
+   comment header are 24px on a mouse, which is half of what a thumb needs. */
+@media (pointer: coarse) {
+  .inline-comment-actions .bolt-button,
+  .inline-thread > header .bolt-button {
+    min-width: 32px;
+    min-height: 32px;
   }
 }
 
