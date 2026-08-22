@@ -63,6 +63,8 @@ injection* below).
 | `clipboard.ts` | Copies text, with the fallback the sandboxed iframe sometimes needs |
 | `pullRequestUrl.ts` | The pull request's own page, from the API link or rebuilt from the host |
 | `hostTheme.ts` | Observes the host's light or dark theme |
+| `viewport.ts` | Observes screen width and pointer type: narrow layout, coarse pointer |
+| `hostLayout.ts` | The host's full-screen mode, read and toggled |
 
 **`src/components/`** — `DiffViewer` (Monaco, view zones, decorations),
 `FileTree`, `Markdown`, `MarkdownCommentEditor`, `MentionTypeahead`, plus
@@ -90,6 +92,8 @@ to "a service per concern":
 | `useMentionDirectory` | Resolving a mention id to a name |
 | `useCommentAttachments` | Uploading an image pasted into a comment, and the object URLs the rendered ones are shown from |
 | `useHostLocationSync` | The open file, to and from the host's `path` parameter, and the `threadId` a share link arrives with |
+| `useViewport` | The screen shape, so the layout can switch between panes and a panel |
+| `useHostFullScreen` | Whether the host is in full screen, and the toggle |
 | `useCollapsedThreads`, `useDiffSelection` | Two small pieces of diff UI state |
 
 Reach for `useAsyncResource` and `usePendingAction` rather than writing the

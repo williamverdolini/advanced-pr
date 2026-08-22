@@ -40,7 +40,9 @@ The `### Explain` block is optional and purely descriptive: it is shown above th
 
 **Links back to a comment.** Every comment carries a share icon, beside its author and date, which copies a link to the pull request with the Guided Review tab, the file, the thread and the comment in the query string. Whoever opens it lands on the right step and file, with the discussion scrolled to the top of the diff and the comment that was linked flashing once.
 
-**Renders a diff that reads like the native one.** Monaco, unified by default with a side-by-side switch, following the host's light or dark theme. Added and deleted files are shown as plain content instead of a diff against nothing; the tree marks each file as added, modified, deleted or renamed, and tracks which ones you have viewed.
+**Works on a phone.** Below 860px the file tree moves out of the splitter into a panel over the diff, opened from the counter in the toolbar and closed by picking a file; the step strip becomes a menu that lists every step with its full title; the diff is unified with long lines wrapped. A full-screen button hands the whole page to the tab, which is what makes the review readable on a screen where the tab is otherwise a few hundred pixels tall.
+
+**Renders a diff that reads like the native one.** Monaco, unified by default with a side-by-side switch, following the host's light or dark theme. Added and deleted files are shown as plain content instead of a diff against nothing, with a deleted file's name struck through in the header; the tree marks each file as added, modified, deleted or renamed, and tracks which ones you have viewed — from the tree, or from the `Viewed` checkbox beside the file's own commands.
 
 **Records approvals as comments.** Approving a step appends an event to a thread-ledger; a deterministic reducer rebuilds the review state from those comments on every load, which is why no database is needed. Approving the last step asks whether to approve the whole pull request — as `Approved` or `Approved with suggestions` — the only action that changes your Azure DevOps vote.
 
@@ -139,7 +141,35 @@ npm run dev
 
 Then open `https://localhost:3000` once to trust the local certificate, open a pull request in the test organization, and select the **Guided Review (Dev)** tab. The development extension must have been published and installed once before Azure DevOps can load from `baseUri`; after that, source changes need no further upload unless the manifest itself changes.
 
-If the tab is blank, check in this order: the dev server is serving `https://localhost:3000`, the certificate is trusted, and the iframe console shows no CSP or worker errors.
+If the tab is blank, check in this order: the dev server is serving the origin `baseUri` names, that origin's certificate has been accepted in this browser (see [Trusting the certificate](#trusting-the-certificate-on-every-device-that-loads-it) — a rejected one blocks the frame silently), and the iframe console shows no CSP or worker errors.
+
+### From a phone
+
+`localhost` on a phone is the phone. To load the dev server from another device on the same network:
+
+```powershell
+npm run dev:lan          # binds every interface instead of localhost alone
+```
+
+Stop the plain `npm run dev` first. The two do not collide on the port — that one listens on the IPv6 loopback and this one on every address — so both start and each answers a different name for the same machine, with two file watchers and two hot-reload channels. `dev:lan` serves `localhost` as well, so one instance covers both.
+
+Then point `baseUri` in `vss-extension.dev.json` at the machine's address (`https://192.168.1.10:3000`) and republish the development extension. Windows Firewall has to allow inbound `3000` on the private network.
+
+#### Trusting the certificate on every device that loads it
+
+The certificate `@vitejs/plugin-basic-ssl` generates covers `localhost`, `127.0.0.1` and `::1` — never the machine's address on the network. Every browser loading from `https://<address>:3000` therefore fails the name check, and **a subframe whose certificate is rejected is blocked with no interstitial**: no warning, no error, a tab that stays blank.
+
+The exception has to be granted in a top-level tab first, on **each device and each browser profile**, the desktop included — the exception it already has for `localhost` does not carry over, because it is a different origin:
+
+1. Open `https://<address>:3000/index.html` in an ordinary tab.
+2. Take the warning's **Advanced → Proceed to the address (unsafe)**.
+3. Reload the pull request; the iframe now loads.
+
+Chrome forgets these exceptions on some restarts, so a tab that goes blank again after one is usually this and not the code.
+
+To be rid of it, issue a certificate that covers the address — `mkcert localhost 127.0.0.1 ::1 192.168.1.10` — hand the pair to `server.https` in `vite.config.ts` in place of `basicSsl`, and install the local CA on both machines. Keep the `.pem` files out of the repository; `.gitignore` already covers them.
+
+The other way out, when none of this is worth it, is to publish `vss-extension.dev-packaged.json`: it serves the built bundle from the Marketplace CDN, so any device reaches it with no network setup and no certificate of ours, at the cost of a build and a publish per change.
 
 ## 5. Package
 

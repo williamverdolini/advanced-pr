@@ -53,6 +53,13 @@ export interface DiffViewerProps<TZone extends DiffZoneAnchor> {
   singleFile?: boolean;
   /** Which side the single editor shows. Ignored when rendering a diff. */
   singleFileSide?: DiffSideKey;
+  /**
+   * Wraps long lines instead of scrolling sideways. On a narrow screen the
+   * horizontal scroll is the difference between reading the code and hunting
+   * for it, and with no scroll left the comment zones stop needing their
+   * horizontal pinning.
+   */
+  wordWrap?: boolean;
   threadDecorations?: readonly DiffThreadDecoration[];
   selectedThreadId?: number;
   revealTarget?: DiffRevealTarget;
@@ -61,8 +68,13 @@ export interface DiffViewerProps<TZone extends DiffZoneAnchor> {
   onRequestComment?: (anchor: DiffSelection) => void;
   /** Fired when the glyph of an existing thread is clicked. */
   onSelectThread?: (threadId: number) => void;
-  /** Filled with the imperative commands once the editor exists. */
-  apiRef?: React.MutableRefObject<DiffViewerApi | undefined>;
+  /**
+   * Handed the imperative commands once the editor exists, and `undefined` when
+   * it goes away. A callback rather than a ref: the caller puts it in state and
+   * builds its toolbar from that, and nothing has to read a ref while
+   * rendering.
+   */
+  onApiReady?: (api?: DiffViewerApi) => void;
   /**
    * Number of differences, once Monaco's worker has computed them. Reported on
    * every recomputation, because it is only known asynchronously.
@@ -164,13 +176,14 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
   renderSideBySide = false,
   singleFile = false,
   singleFileSide = "right",
+  wordWrap = false,
   threadDecorations = [],
   selectedThreadId,
   revealTarget,
   onSelectionChange,
   onRequestComment,
   onSelectThread,
-  apiRef,
+  onApiReady,
   onDiffUpdated,
 }: DiffViewerProps<TZone>): React.ReactElement {
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -224,6 +237,7 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
     onSelectionChange,
     onRequestComment,
     onSelectThread,
+    onApiReady,
     onDiffUpdated,
   });
 
@@ -232,6 +246,7 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
       onSelectionChange,
       onRequestComment,
       onSelectThread,
+      onApiReady,
       onDiffUpdated,
     };
   });
@@ -252,9 +267,9 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
     editorRef.current = editor;
     const sides = editorSides(editor);
 
-    if (apiRef) {
-      apiRef.current = { goToDiff: (direction) => editor.goToDiff(direction) };
-    }
+    callbacksRef.current.onApiReady?.({
+      goToDiff: (direction) => editor.goToDiff(direction),
+    });
 
     // The count is only known once the worker has run, and again after every
     // model change, so it is reported rather than read on demand.
@@ -399,9 +414,7 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
     return () => {
       subscriptions.forEach((subscription) => subscription.dispose());
       diffSubscription?.dispose();
-      if (apiRef) {
-        apiRef.current = undefined;
-      }
+      callbacksRef.current.onApiReady?.(undefined);
       stopThemeObserver();
       Object.values(hoverCollectionsRef.current).forEach((collection) => collection?.clear());
       hoverCollectionsRef.current = {};
@@ -415,11 +428,17 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
       editorRef.current = undefined;
       editor.dispose();
     };
-  }, [apiRef, applyPendingReveal, singleFile, singleFileSide]);
+  }, [applyPendingReveal, singleFile, singleFileSide]);
 
   React.useEffect(() => {
     editorRef.current?.setSideBySide(renderSideBySide);
   }, [renderSideBySide]);
+
+  React.useEffect(() => {
+    const editor = editorRef.current;
+    editor?.sideEditor("left").updateOptions({ wordWrap: wordWrap ? "on" : "off" });
+    editor?.sideEditor("right").updateOptions({ wordWrap: wordWrap ? "on" : "off" });
+  }, [wordWrap]);
 
   React.useEffect(() => {
     const editor = editorRef.current;
@@ -565,6 +584,16 @@ function pinZoneToViewport(codeEditor: monaco.editor.ICodeEditor, container: HTM
   container.style.transform = `translateX(${codeEditor.getScrollLeft()}px)`;
 }
 
+/** Anything a tap is meant to reach: it must not be turned into an editor tap. */
+const zoneControlSelector = "a, button, input, textarea, select, [contenteditable='true']";
+
+function stopTouchOnControls(event: Event): void {
+  const target = event.target as HTMLElement | null;
+  if (target?.closest?.(zoneControlSelector)) {
+    event.stopPropagation();
+  }
+}
+
 function createZone(editor: EditorHandle, anchor: DiffZoneAnchor): MountedZone {
   const container = document.createElement("div");
   container.className = "advanced-pr-zone";
@@ -581,6 +610,17 @@ function createZone(editor: EditorHandle, anchor: DiffZoneAnchor): MountedZone {
   container.addEventListener("keydown", stopKeys);
   container.addEventListener("keyup", stopKeys);
   container.addEventListener("keypress", stopKeys);
+
+  // The same problem under a finger, and worse. Monaco's gesture recogniser
+  // listens on the document, and its tap handler calls `preventDefault` and
+  // pulls focus to the editor's own textarea: a tap on a button inside a zone
+  // never becomes a click, and a tap on a reply box never gets to keep the
+  // focus it needs to receive typing. Only touches that start on a control are
+  // withheld from it, so dragging anywhere else over a comment still scrolls
+  // the diff, which is most of what a finger does here.
+  container.addEventListener("touchstart", stopTouchOnControls, { passive: true });
+  container.addEventListener("touchmove", stopTouchOnControls, { passive: true });
+  container.addEventListener("touchend", stopTouchOnControls);
 
   const zone: monaco.editor.IViewZone = {
     afterLineNumber: anchor.afterLineNumber,
@@ -613,6 +653,9 @@ function createZone(editor: EditorHandle, anchor: DiffZoneAnchor): MountedZone {
       container.removeEventListener("keydown", stopKeys);
       container.removeEventListener("keyup", stopKeys);
       container.removeEventListener("keypress", stopKeys);
+      container.removeEventListener("touchstart", stopTouchOnControls);
+      container.removeEventListener("touchmove", stopTouchOnControls);
+      container.removeEventListener("touchend", stopTouchOnControls);
       editor.sideEditor(mounted.side).changeViewZones((accessor) =>
         accessor.removeZone(mounted.zoneId),
       );
@@ -663,6 +706,18 @@ function createEditorHandle(
     automaticLayout: true,
     glyphMargin: true,
     readOnly: true,
+    // Puts `readonly` on the hidden textarea Monaco keeps the focus in. Nothing
+    // was ever editable, but a plain focus on a writable field is what raises
+    // the software keyboard: tapping the code brought it up over half the screen
+    // for text that cannot be typed into. Selection and copying are unaffected.
+    domReadOnly: true,
+    // And `domReadOnly` only reaches that textarea. Left to itself Monaco now
+    // prefers the EditContext API, whose input surface is a focusable element
+    // the browser treats as an editor whatever the editor's own read-only flag
+    // says, so the keyboard came up anyway. The textarea implementation is the
+    // one that can be told there is nothing to type, and this viewer never
+    // types: no composition, no IME, nothing the newer path is there for.
+    editContext: false,
     scrollBeyondLastLine: false,
   };
 
