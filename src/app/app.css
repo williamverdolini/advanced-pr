@@ -799,9 +799,22 @@ body,
   min-height: 300px;
 }
 
+/* Takes the editor's place, so it owns the scroll the editor was doing: the
+   card content is a flex column with no scroll of its own. */
+.diff-preview {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 8px 12px 16px;
+  overflow: auto;
+}
+
+.diff-view-mode,
+.diff-view-options {
+  align-self: center;
+}
+
 /* Rendered inside the card header's command bar, so no padding or separator of
    its own: the header already provides both. */
-.diff-layout-switch,
 .diff-segmented {
   display: flex;
   align-self: center;
@@ -811,7 +824,6 @@ body,
 /* One explicit height for both groups, rather than letting text and a glyph
    each work out their own: a 0.75rem line box and a 0.75rem icon do not agree,
    and the two groups sit side by side. The shorter of the two wins. */
-.diff-layout-switch button,
 .diff-segmented button {
   display: inline-flex;
   align-items: center;
@@ -826,28 +838,17 @@ body,
   cursor: pointer;
 }
 
-.diff-layout-switch button:first-child,
 .diff-segmented button:first-child {
   border-radius: 2px 0 0 2px;
 }
 
-.diff-layout-switch button:last-child,
 .diff-segmented button:last-child {
   border-radius: 0 2px 2px 0;
   border-left-width: 0;
 }
 
-.diff-layout-switch button:hover:not(:disabled),
 .diff-segmented button:hover:not(:disabled) {
   background: rgba(var(--palette-neutral-6, 239, 239, 239), 1);
-}
-
-/* Selected, not primary: a filled accent would read as the main action of the
-   pane, which choosing a layout is not. */
-.diff-layout-switch button.active {
-  color: var(--text-primary-color, rgba(0, 0, 0, 0.9));
-  background: rgba(var(--palette-neutral-8, 234, 234, 234), 1);
-  font-weight: 600;
 }
 
 /* Icon alone, so the pair stays as narrow as the header allows. */

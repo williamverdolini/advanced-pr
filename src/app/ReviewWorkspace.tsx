@@ -22,6 +22,11 @@ import { Markdown } from "../components/Markdown";
 import { AttachmentContext } from "../components/attachmentContext";
 import { MentionContext } from "../components/mentionContext";
 import { contentSideForChange, isContentOnlyChange } from "../core/changeType";
+import {
+  availableDiffViewModes,
+  resolveDiffViewMode,
+  type DiffViewMode,
+} from "../core/diffViewMode";
 import { adjacentFile, fileNameFromPath, nextFileToReview } from "../core/fileTree";
 import type { InlineZoneDescriptor } from "../core/inlineZones";
 import type { ReviewStep } from "../core/reviewPlan";
@@ -81,7 +86,12 @@ export function ReviewWorkspace({
   const [selectedThreadId, setSelectedThreadId] = React.useState<number>();
   // What a share link pointed at, until the card has announced itself once.
   const [linked, setLinked] = React.useState<{ threadId: number; commentId?: number }>();
-  const [sideBySide, setSideBySide] = React.useState(false);
+  // What the reader asked for, not necessarily what is rendered: a mode the next
+  // file cannot show falls back without being forgotten. See `core/diffViewMode`.
+  const [requestedViewMode, setRequestedViewMode] = React.useState<DiffViewMode>("inline");
+  const [showWhitespace, setShowWhitespace] = React.useState(false);
+  const [wordWrap, setWordWrap] = React.useState(false);
+  const [stickyScroll, setStickyScroll] = React.useState(true);
   const [draft, setDraft] = React.useState<DiffSelection>();
   const [explainExpanded, setExplainExpanded] = React.useState(false);
   const [clearFeedbackScope, setClearFeedbackScope] = React.useState<FeedbackScope>();
@@ -120,9 +130,15 @@ export function ReviewWorkspace({
   // no sides to lay out and the one side it has is the one on screen.
   const contentOnly = selectedFile ? isContentOnlyChange(selectedFile.changeKind) : false;
   const contentSide = selectedFile ? contentSideForChange(selectedFile.changeKind) : "right";
-  // Two columns of code do not fit on a narrow screen, whatever the switch says,
-  // and the switch itself is hidden there.
-  const splitView = sideBySide && !contentOnly && !viewport.narrow;
+  const viewModes: readonly DiffViewMode[] = selectedFile
+    ? availableDiffViewModes({ path: selectedFile.path, contentOnly, narrow: viewport.narrow })
+    : ["inline"];
+  const viewMode = resolveDiffViewMode(requestedViewMode, viewModes);
+  const splitView = viewMode === "sideBySide";
+  // Rendered Markdown replaces the editor entirely: there are no lines to
+  // anchor a comment to, so the inline threads are the tree's business while it
+  // is on screen.
+  const previewing = viewMode === "preview";
 
   // Memoized only where identity matters: each of these feeds a dependency
   // array, another memo, or a component that would otherwise rebuild. The plain
@@ -423,14 +439,21 @@ export function ReviewWorkspace({
       headerCommandBarItems={
         selectedFile
           ? buildDiffCommands({
-              contentOnly,
-              sideBySide,
-              // The layout switch is pointless where only one layout fits.
-              layoutSwitch: !viewport.narrow,
+              viewMode,
+              viewModes,
               differenceCount,
               viewed: viewedFiles.has(selectedFile.path),
+              showWhitespace,
+              wordWrap: wordWrap || viewport.narrow,
+              // A narrow screen wraps whatever the switch says, so there is no
+              // choice left to offer there.
+              wordWrapChoosable: !viewport.narrow,
+              stickyScroll,
               onViewedChange: (viewed) => setFilesViewed([selectedFile.path], viewed),
-              onSideBySideChange: setSideBySide,
+              onViewModeChange: setRequestedViewMode,
+              onShowWhitespaceChange: setShowWhitespace,
+              onWordWrapChange: setWordWrap,
+              onStickyScrollChange: setStickyScroll,
               onGoToDifference: goToDifference,
             })
           : undefined
@@ -441,13 +464,19 @@ export function ReviewWorkspace({
       {diffError && (
         <MessageCard severity={MessageCardSeverity.Warning}>{diffError}</MessageCard>
       )}
-      {inlineDiff.hiddenThreadCount > 0 && (
+      {inlineDiff.hiddenThreadCount > 0 && !previewing && (
         <MessageCard severity={MessageCardSeverity.Info}>
           {inlineDiff.hiddenThreadCount} more comments on this file are listed in the tree
           but not shown inline.
         </MessageCard>
       )}
-      {selectedFile && diff && (
+      {selectedFile && diff && previewing && (
+        <Markdown
+          className="diff-preview"
+          content={contentSide === "left" ? diff.original : diff.modified}
+        />
+      )}
+      {selectedFile && diff && !previewing && (
         <DiffViewer
           original={diff.original}
           modified={diff.modified}
@@ -456,7 +485,9 @@ export function ReviewWorkspace({
           zones={inlineDiff.zones}
           renderZone={renderZone}
           renderSideBySide={splitView}
-      wordWrap={viewport.narrow}
+          wordWrap={wordWrap || viewport.narrow}
+          showWhitespace={showWhitespace}
+          stickyScroll={stickyScroll}
           singleFile={contentOnly}
           singleFileSide={contentSide}
           threadDecorations={inlineDiff.threadDecorations}

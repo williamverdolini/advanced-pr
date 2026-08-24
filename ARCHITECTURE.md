@@ -42,6 +42,8 @@ except `hash.ts` (asserted through `reviewPlan`'s tests, which depend on it).
 | `threadIndex.ts` | Threads grouped by file, ordered by line |
 | `shareLink.ts` | The link back to one comment: pull request page, tab, file and thread |
 | `changeType.ts` | Azure DevOps change bitmask to `add`/`edit`/`delete`/`rename`, and which diff side to show |
+| `diffViewMode.ts` | Which of inline, side by side and Markdown preview the open file can be shown in, and which one a stale request falls back to |
+| `blockFolding.ts` | Folding ranges for a brace language, started on the declaration line rather than on its brace: what the sticky header reads |
 | `viewedFiles.ts` | Reconciles viewed marks against blob revisions, so a new push clears the stale ones |
 | `toggleSet.ts` | Immutable membership updates for the `ReadonlySet` values held in React state |
 | `theme.ts` | Whether a host CSS colour is dark |
@@ -69,13 +71,15 @@ injection* below).
 **`src/components/`** — `DiffViewer` (Monaco, view zones, decorations),
 `FileTree`, `Markdown`, `MarkdownCommentEditor`, `MentionTypeahead`, plus
 `mentionContext.ts` and `attachmentContext.ts` (the React contexts carrying the
-mention resolver and the attachment service) and `caretCoordinates.ts`.
+mention resolver and the attachment service), `caretCoordinates.ts` and
+`registerBlockFolding.ts` (the folding provider the sticky header reads, for the
+languages Monaco ships without one).
 
 **`src/app/`** — state and composition, one file per component or concern.
 `App.tsx` owns the session and the one fetch it depends on; `ReviewWorkspace.tsx`
 is the container that wires the review together, and everything it renders sits
 beside it: `StepWizard`, `StepActions`, `PlanEditor`, `ExplainPanel`,
-`DiffLayoutSwitch`, `DiffNavigation`, `StepDecisions`, `InlineThreadCard`,
+`DiffViewModePicker`, `DiffViewOptions`, `DiffNavigation`, `StepDecisions`, `InlineThreadCard`,
 `InlineComposer`, `SignOffDialog`, `ClearFeedbackDialog`, plus `diffCommands.tsx`
 (the card header commands), `planTemplate.ts` and `formatDate.ts`.
 

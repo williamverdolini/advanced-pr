@@ -2,6 +2,7 @@ import * as React from "react";
 import * as ReactDOM from "react-dom";
 import * as monaco from "monaco-editor";
 import { observeHostTheme } from "../platform/hostTheme";
+import { registerBlockFolding } from "./registerBlockFolding";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import CssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
 import HtmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
@@ -29,6 +30,10 @@ type MonacoGlobal = typeof globalThis & {
     return new EditorWorker();
   },
 };
+
+// Module scope, like the environment above: the providers belong to the Monaco
+// singleton, not to an editor instance.
+registerBlockFolding();
 
 export interface DiffViewerProps<TZone extends DiffZoneAnchor> {
   original: string;
@@ -60,6 +65,20 @@ export interface DiffViewerProps<TZone extends DiffZoneAnchor> {
    * horizontal pinning.
    */
   wordWrap?: boolean;
+  /**
+   * Renders space and tab glyphs, and stops the comparison ignoring a change
+   * that is whitespace only. Off by default: a reformatting commit is unreadable
+   * with every space marked, and a whitespace-only change is usually noise —
+   * except when it is the change, which is what this is for.
+   */
+  showWhitespace?: boolean;
+  /**
+   * Keeps the enclosing scopes pinned above the code while it scrolls. On by
+   * default, which is Monaco's own default: the switch exists because the lines
+   * it pins are worth little in a language the bundle cannot outline, and
+   * because it costs height a phone does not have.
+   */
+  stickyScroll?: boolean;
   threadDecorations?: readonly DiffThreadDecoration[];
   selectedThreadId?: number;
   revealTarget?: DiffRevealTarget;
@@ -131,6 +150,8 @@ interface EditorHandle {
   setModels(models: { original?: monaco.editor.ITextModel; modified: monaco.editor.ITextModel }): void;
   clearModels(): void;
   setSideBySide(value: boolean): void;
+  /** Whether a change made only of whitespace counts as a difference. */
+  setWhitespaceInDiff(value: boolean): void;
   dispose(): void;
 }
 
@@ -177,6 +198,8 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
   singleFile = false,
   singleFileSide = "right",
   wordWrap = false,
+  showWhitespace = false,
+  stickyScroll = true,
   threadDecorations = [],
   selectedThreadId,
   revealTarget,
@@ -439,6 +462,24 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
     editor?.sideEditor("left").updateOptions({ wordWrap: wordWrap ? "on" : "off" });
     editor?.sideEditor("right").updateOptions({ wordWrap: wordWrap ? "on" : "off" });
   }, [wordWrap]);
+
+  // Two settings, one switch: the glyphs make whitespace visible, and the diff
+  // option makes it count. Showing marks on a line the comparison has decided
+  // is unchanged would be the worse half of the answer on its own.
+  React.useEffect(() => {
+    const editor = editorRef.current;
+    const renderWhitespace = showWhitespace ? "all" : "selection";
+    editor?.sideEditor("left").updateOptions({ renderWhitespace });
+    editor?.sideEditor("right").updateOptions({ renderWhitespace });
+    editor?.setWhitespaceInDiff(showWhitespace);
+  }, [showWhitespace]);
+
+  React.useEffect(() => {
+    const editor = editorRef.current;
+    const options = { stickyScroll: { enabled: stickyScroll } };
+    editor?.sideEditor("left").updateOptions(options);
+    editor?.sideEditor("right").updateOptions(options);
+  }, [stickyScroll]);
 
   React.useEffect(() => {
     const editor = editorRef.current;
@@ -735,6 +776,8 @@ function createEditorHandle(
         editor.setModel(singleFileSide === "left" ? (original ?? modified) : modified),
       clearModels: () => editor.setModel(null),
       setSideBySide: () => undefined,
+      // Nothing is being compared, so there is no comparison to tune.
+      setWhitespaceInDiff: () => undefined,
       dispose: () => editor.dispose(),
     };
   }
@@ -755,6 +798,7 @@ function createEditorHandle(
       original && editor.setModel({ original, modified }),
     clearModels: () => editor.setModel(null),
     setSideBySide: (value) => editor.updateOptions({ renderSideBySide: value }),
+    setWhitespaceInDiff: (value) => editor.updateOptions({ ignoreTrimWhitespace: !value }),
     dispose: () => editor.dispose(),
   };
 }
