@@ -44,6 +44,9 @@ except `hash.ts` (asserted through `reviewPlan`'s tests, which depend on it).
 | `changeType.ts` | Azure DevOps change bitmask to `add`/`edit`/`delete`/`rename`, and which diff side to show |
 | `diffViewMode.ts` | Which of inline, side by side and Markdown preview the open file can be shown in, and which one a stale request falls back to |
 | `blockFolding.ts` | Folding ranges for a brace language, started on the declaration line rather than on its brace: what the sticky header reads |
+| `diffCommands.ts` | Which commands the diff card's header carries, in which order, and that none of them may fall into its overflow menu |
+| `diffViewSettings.ts` | The reader's rendering preferences — white space, word wrap, sticky scroll — and reading a stored set back |
+| `initials.ts` | The letters that stand in for an author's picture |
 | `viewedFiles.ts` | Reconciles viewed marks against blob revisions, so a new push clears the stale ones |
 | `toggleSet.ts` | Immutable membership updates for the `ReadonlySet` values held in React state |
 | `theme.ts` | Whether a host CSS colour is dark |
@@ -61,6 +64,7 @@ injection* below).
 | `identityService.ts` | The host's identity picker, for mentions. Caches every identity it has seen |
 | `viewedFilesStore.ts` | Per-user viewed marks, in the extension data service |
 | `splitterWidthStore.ts` | The files pane's width, in the browser's local storage |
+| `diffViewSettingsStore.ts` | The reader's rendering preferences, in the browser's local storage |
 | `hostNavigation.ts` | Reads and writes the host's `path` and `threadId` query parameters |
 | `clipboard.ts` | Copies text, with the fallback the sandboxed iframe sometimes needs |
 | `pullRequestUrl.ts` | The pull request's own page, from the API link or rebuilt from the host |

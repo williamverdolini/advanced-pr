@@ -22,6 +22,7 @@ import { Markdown } from "../components/Markdown";
 import { AttachmentContext } from "../components/attachmentContext";
 import { MentionContext } from "../components/mentionContext";
 import { contentSideForChange, isContentOnlyChange } from "../core/changeType";
+import type { DiffViewSettings } from "../core/diffViewSettings";
 import {
   availableDiffViewModes,
   resolveDiffViewMode,
@@ -39,6 +40,10 @@ import {
   type PullRequestWorkspace,
   type ReviewThread,
 } from "../platform/azureDevOpsClient";
+import {
+  loadDiffViewSettings,
+  saveDiffViewSettings,
+} from "../platform/diffViewSettingsStore";
 import { loadSplitterWidth, saveSplitterWidth } from "../platform/splitterWidthStore";
 import { buildDiffCommands } from "./diffCommands";
 import { ClearFeedbackDialog } from "./ClearFeedbackDialog";
@@ -89,9 +94,15 @@ export function ReviewWorkspace({
   // What the reader asked for, not necessarily what is rendered: a mode the next
   // file cannot show falls back without being forgotten. See `core/diffViewMode`.
   const [requestedViewMode, setRequestedViewMode] = React.useState<DiffViewMode>("inline");
-  const [showWhitespace, setShowWhitespace] = React.useState(false);
-  const [wordWrap, setWordWrap] = React.useState(false);
-  const [stickyScroll, setStickyScroll] = React.useState(true);
+  // Read once, on mount, and written back on every change: these hold for every
+  // pull request this reader opens, not for this one. See
+  // `platform/diffViewSettingsStore`.
+  const [viewSettings, setViewSettings] = React.useState(loadDiffViewSettings);
+  const changeViewSettings = (change: Partial<DiffViewSettings>): void => {
+    const next = { ...viewSettings, ...change };
+    saveDiffViewSettings(next);
+    setViewSettings(next);
+  };
   const [draft, setDraft] = React.useState<DiffSelection>();
   const [explainExpanded, setExplainExpanded] = React.useState(false);
   const [clearFeedbackScope, setClearFeedbackScope] = React.useState<FeedbackScope>();
@@ -443,17 +454,17 @@ export function ReviewWorkspace({
               viewModes,
               differenceCount,
               viewed: viewedFiles.has(selectedFile.path),
-              showWhitespace,
-              wordWrap: wordWrap || viewport.narrow,
+              showWhitespace: viewSettings.showWhitespace,
+              wordWrap: viewSettings.wordWrap || viewport.narrow,
               // A narrow screen wraps whatever the switch says, so there is no
               // choice left to offer there.
               wordWrapChoosable: !viewport.narrow,
-              stickyScroll,
+              stickyScroll: viewSettings.stickyScroll,
               onViewedChange: (viewed) => setFilesViewed([selectedFile.path], viewed),
               onViewModeChange: setRequestedViewMode,
-              onShowWhitespaceChange: setShowWhitespace,
-              onWordWrapChange: setWordWrap,
-              onStickyScrollChange: setStickyScroll,
+              onShowWhitespaceChange: (showWhitespace) => changeViewSettings({ showWhitespace }),
+              onWordWrapChange: (wordWrap) => changeViewSettings({ wordWrap }),
+              onStickyScrollChange: (stickyScroll) => changeViewSettings({ stickyScroll }),
               onGoToDifference: goToDifference,
             })
           : undefined
@@ -485,9 +496,9 @@ export function ReviewWorkspace({
           zones={inlineDiff.zones}
           renderZone={renderZone}
           renderSideBySide={splitView}
-          wordWrap={wordWrap || viewport.narrow}
-          showWhitespace={showWhitespace}
-          stickyScroll={stickyScroll}
+          wordWrap={viewSettings.wordWrap || viewport.narrow}
+          showWhitespace={viewSettings.showWhitespace}
+          stickyScroll={viewSettings.stickyScroll}
           singleFile={contentOnly}
           singleFileSide={contentSide}
           threadDecorations={inlineDiff.threadDecorations}
