@@ -12,6 +12,7 @@ import {
 } from "../core/fileTree";
 import { toggleMember } from "../core/toggleSet";
 import type { ChangedFile, ReviewThread } from "../platform/azureDevOpsClient";
+import { Avatar } from "./Avatar";
 import { MentionContext } from "./mentionContext";
 
 const noRelatedFiles: ReadonlyMap<string, readonly ChangedFile[]> = new Map();
@@ -257,6 +258,10 @@ function TreeNodes({
                 <ul className="file-thread-list" role="group">
                   {fileThreads.map((thread) => {
                     const lastComment = thread.comments.at(-1);
+                    // Who opened the thread, not who replied last: the row is
+                    // the thread, and an avatar that changed on every reply
+                    // would stop being the way to recognise it.
+                    const openedBy = thread.comments[0];
                     // A summary line, so mention tokens are reduced to names
                     // rather than shown as raw identity ids.
                     const preview = lastComment
@@ -271,16 +276,34 @@ function TreeNodes({
                               ? "file-thread-button selected"
                               : "file-thread-button"
                           }
-                          title={preview ?? `Comment ${thread.id}`}
+                          // The line the comment sits on moved off the row and
+                          // into its tooltip: the avatar says whose comment it
+                          // is, which is what the row is scanned for, and the
+                          // line was pushing the preview out of a narrow pane.
+                          title={[
+                            openedBy?.authorName,
+                            thread.position ? `L${thread.position.startLine}` : undefined,
+                            preview,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                          // Indented off its file, on the same column as a
+                          // related file: both are rows belonging to the file
+                          // above them, and a fixed indent put them to the left
+                          // of their own file once the folders nested deeply
+                          // enough.
+                          style={{ paddingLeft: `${(level - 1) * 14 + 40}px` }}
                           onClick={() => onSelectThread(node.file, thread)}
                         >
                           <span
                             className={thread.isOpen ? "thread-state open" : "thread-state resolved"}
                             aria-label={thread.isOpen ? "Open comment" : "Resolved comment"}
                           />
-                          <span className="file-thread-line">
-                            L{thread.position?.startLine ?? "?"}
-                          </span>
+                          <Avatar
+                            className="file-thread-avatar"
+                            name={openedBy?.authorName ?? "Unknown author"}
+                            imageUrl={openedBy?.authorImageUrl}
+                          />
                           <span className="file-thread-preview">
                             {preview || "Comment"}
                           </span>

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.2
+
+- **A comment in the file tree shows who opened it**, as their picture, in place of the line number it used to carry — initials when the picture does not load. The line moved into the row's tooltip, beside the author's name.
+- For contributors: which commands the diff header carries now lives in `core/diffCommands.ts`, with the tests that keep the difference arrows from being dropped again.
+
+## 0.9.1
+
+- **The previous and next difference arrows are back.** The two commands 0.9.0 added pushed them into the header's `...` menu, where they became a dead entry reading "Differences": the command bar keeps three buttons and overflows the rest, and an overflowed custom control renders as its label alone.
+- **Comments in the file tree line up under their file**, at any folder depth. Their indent was fixed, so past the fourth folder they sat to the left of the file they belong to.
+- **A four-digit line number no longer runs under the comment beside it** in the tree: the label took the width of `L99` whatever the line was.
+
 ## 0.9.0
 
 - **Markdown preview.** A `.md` file can be read rendered, instead of as a diff.

@@ -568,12 +568,15 @@ body,
 
 .file-thread-button {
   display: grid;
-  grid-template-columns: 10px 28px minmax(0, 1fr);
+  /* Dot, avatar, preview: the middle column is the avatar's own size, and the
+     preview is the one that gives way, being the one that can be trimmed. */
+  grid-template-columns: 10px 16px minmax(0, 1fr);
   align-items: center;
   gap: 5px;
   width: 100%;
   min-height: 28px;
-  padding: 3px 8px 3px 58px;
+  /* The left inset is set per row, from the file's depth in the tree. */
+  padding: 3px 8px;
   border: 0;
   color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
   background: transparent;
@@ -610,8 +613,31 @@ body,
   background: transparent;
 }
 
-.file-thread-line {
-  font-family: "Cascadia Mono", Menlo, Consolas, "Courier New", monospace;
+/* Same 16px coin the native Files tab uses, so a row of ours and a row of
+   theirs read as the same kind of thing. */
+.avatar {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(var(--palette-neutral-20, 200, 200, 200), 1);
+  color: var(--text-primary-color, rgba(0, 0, 0, 0.9));
+  /* The pair of letters has to fit a circle a line of text tall. */
+  font-size: 0.5rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
+  user-select: none;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .file-thread-preview {
