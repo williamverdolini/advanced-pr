@@ -93,13 +93,16 @@ Scopes are deliberately kept to this set. Adding one invalidates the extension c
 The extension is published privately under the **NebulaImprover** publisher:
 
 - Production extension: `NebulaImprover.advanced-pr`, manifest `vss-extension.json`, with `dist/` bundled.
-- Development extension: `NebulaImprover.advanced-pr-dev`, with **two** manifests that take turns:
-  - `vss-extension.dev.json` loads from `baseUri: https://localhost:3000`, for hot reload;
-  - `vss-extension.dev-packaged.json` bundles `dist/` instead, to rehearse a release.
+- Development extension: `NebulaImprover.advanced-pr-dev`, with **three** manifests that take turns:
+  - `vss-extension.dev.json` loads from `baseUri: https://<dev-machine-address>:3000`, for hot reload **from any device on the network, this one included**. The one to reach for: a phone and the desktop read the same tab from the same dev server;
+  - `vss-extension.dev-localhost.json` loads from `baseUri: https://localhost:3000` instead, for a desktop-only session that wants nothing to do with the network or its certificate;
+  - `vss-extension.dev-packaged.json` bundles `dist/` instead of loading from a `baseUri` at all, to rehearse a release.
 
 The rehearsal exists because `baseUri` never exercises how the packaged bundle resolves its assets from the Marketplace CDN, and Azure DevOps allows no sideloading: publishing is the only way to find out. Doing it on the development extension ID spends a throwaway version number instead of a production one.
 
-Both development manifests share that one extension ID, and therefore **one version line**. They take turns on it: after publishing the packaged variant, going back to hot reload means bumping `vss-extension.dev.json` above the version just published, not republishing the number it still carries. The Marketplace rejects a version equal to or lower than the published one, and that rejection is the usual reason a republish "does nothing".
+All three share that one extension ID, and therefore **one version line** — which is the point of them sharing it: one extension, one installation, one tab in the pull request, and switching where it loads from is a publish rather than a second thing installed for everyone to see. They take turns on the line: whichever manifest is published next needs a version above the last one published for the ID, from whatever file that was. The Marketplace rejects a version equal to or lower than the published one, and that rejection is the usual reason a republish "does nothing", because the number a manifest still carries is the number it was published with.
+
+The number sitting in a manifest is only worth something once that file has been published — `--rev-version` writes the bump back into the file it published, and into no other. So a sibling manifest's version says nothing about where the ID is: read that off the extension's Marketplace page before publishing a manifest that has been idle for a few rounds.
 
 ## 1. Prerequisites
 
@@ -131,35 +134,40 @@ Run all three before opening a pull request. Most of the value sits in the unit 
 
 ## 4. Run it locally
 
-Azure DevOps loads extensions in an iframe from an HTTPS origin, so local development goes through the development manifest and its `baseUri`.
+Azure DevOps loads extensions in an iframe from an HTTPS origin, so local development goes through a development manifest and its `baseUri`.
 
 ```powershell
 npm run dev
 ```
 
-`npm run dev` and `npm run dev:watch` are equivalent: both start Vite in watch mode with hot module replacement on the fixed port `3000`. Keep one instance running; a second exits with "address already in use".
+One Vite instance, in watch mode with hot module replacement, on the fixed port `3000`, listening on **every interface**: it prints one line per address it bound, `https://localhost:3000` among them. Keep one instance running; a second exits with "address already in use". `npm run dev:local` binds the loopback alone, for a session that has no reason to be reachable.
 
-Then open `https://localhost:3000` once to trust the local certificate, open a pull request in the test organization, and select the **Guided Review (Dev)** tab. The development extension must have been published and installed once before Azure DevOps can load from `baseUri`; after that, source changes need no further upload unless the manifest itself changes.
+That one server answers both names the development manifests use, so which one a tab loads from is decided by the manifest that was published, never by what is running:
 
-If the tab is blank, check in this order: the dev server is serving the origin `baseUri` names, that origin's certificate has been accepted in this browser (see [Trusting the certificate](#trusting-the-certificate-on-every-device-that-loads-it) — a rejected one blocks the frame silently), and the iframe console shows no CSP or worker errors.
+- `vss-extension.dev.json`, on the machine's **network address**, is the one to publish by default. The phone reaches it, and so does the desktop — the address is the desktop's own. One tab, both devices, one hot-reload channel; the price is the certificate step below, on the desktop too.
+- `vss-extension.dev-localhost.json`, on `localhost`, when the session is desktop-only and the certificate exception is not worth granting again. Nothing else differs.
+
+Then open the `baseUri` origin once in an ordinary tab to accept its certificate, open a pull request in the test organization, and select the **Guided Review (Dev)** tab. The development extension must have been published and installed once before Azure DevOps can load from `baseUri`; after that, source changes need no further upload — only a change to the manifest itself does, which is what switching between those two is.
+
+If the tab is blank, check in this order: the dev server bound the name the published `baseUri` uses, that origin's certificate has been accepted in this browser (see [Trusting the certificate](#trusting-the-certificate-on-every-device-that-loads-it) — a rejected one blocks the frame silently), and the iframe console shows no CSP or worker errors.
 
 ### From a phone
 
-`localhost` on a phone is the phone. To load the dev server from another device on the same network:
+`localhost` on a phone is the phone, and an extension has exactly one `baseUri`, so a tab a phone can load is a tab that loads from the machine's address on the network. Which is also an address the desktop can load — that is why `vss-extension.dev.json` carries it, and why it is the manifest to publish unless there is a reason not to: one publish, one tab, and the phone and the desktop read the same code from the same server as it is saved.
 
-```powershell
-npm run dev:lan          # binds every interface instead of localhost alone
-```
+Once, before the first run of that manifest:
 
-Stop the plain `npm run dev` first. The two do not collide on the port — that one listens on the IPv6 loopback and this one on every address — so both start and each answers a different name for the same machine, with two file watchers and two hot-reload channels. `dev:lan` serves `localhost` as well, so one instance covers both.
+1. Put this machine's address in its `baseUri` (`https://192.168.1.10:3000`), then publish it. `npm run dev` prints every address it bound, one line per interface: the one to take is the physical adapter's, not the `vEthernet` addresses Hyper-V and WSL contribute — nothing off this machine routes to those.
+2. Allow inbound `3000` on the **private** network in Windows Firewall.
+3. Accept the certificate, on the phone and on the desktop both — a step of its own, below.
 
-Then point `baseUri` in `vss-extension.dev.json` at the machine's address (`https://192.168.1.10:3000`) and republish the development extension. Windows Firewall has to allow inbound `3000` on the private network.
+The address is baked into a published manifest, so a DHCP lease that moves this machine costs an edit, a version bump and a republish. A static reservation for the development machine pays for itself after the first move. Publishing `vss-extension.dev-localhost.json` is the way back to a loopback-only session in the meantime.
 
 #### Trusting the certificate on every device that loads it
 
 The certificate `@vitejs/plugin-basic-ssl` generates covers `localhost`, `127.0.0.1` and `::1` — never the machine's address on the network. Every browser loading from `https://<address>:3000` therefore fails the name check, and **a subframe whose certificate is rejected is blocked with no interstitial**: no warning, no error, a tab that stays blank.
 
-The exception has to be granted in a top-level tab first, on **each device and each browser profile**, the desktop included — the exception it already has for `localhost` does not carry over, because it is a different origin:
+The exception has to be granted in a top-level tab first, on **each device and each browser profile** that opens the tab — the desktop included, whenever the published manifest is the network one: an exception granted for `localhost` does not carry over, because it is a different origin. This is the whole cost of one tab serving both devices, and the reason `vss-extension.dev-localhost.json` still exists.
 
 1. Open `https://<address>:3000/index.html` in an ordinary tab.
 2. Take the warning's **Advanced → Proceed to the address (unsafe)**.
@@ -167,19 +175,20 @@ The exception has to be granted in a top-level tab first, on **each device and e
 
 Chrome forgets these exceptions on some restarts, so a tab that goes blank again after one is usually this and not the code.
 
-To be rid of it, issue a certificate that covers the address — `mkcert localhost 127.0.0.1 ::1 192.168.1.10` — hand the pair to `server.https` in `vite.config.ts` in place of `basicSsl`, and install the local CA on both machines. Keep the `.pem` files out of the repository; `.gitignore` already covers them.
+To be rid of it, issue one certificate covering both names — `mkcert localhost 127.0.0.1 ::1 192.168.1.10` — hand the pair to `server.https` in `vite.config.ts` in place of `basicSsl`, and install the local CA on every device that loads the tab. One server answers both origins, so one certificate covering both is enough whichever manifest is published. Keep the `.pem` files out of the repository; `.gitignore` already covers them.
 
 The other way out, when none of this is worth it, is to publish `vss-extension.dev-packaged.json`: it serves the built bundle from the Marketplace CDN, so any device reaches it with no network setup and no certificate of ours, at the cost of a build and a publish per change.
 
 ## 5. Package
 
 ```powershell
-npx --package tfx-cli tfx extension create --manifest-globs vss-extension.dev.json            # hot reload
-npx --package tfx-cli tfx extension create --manifest-globs vss-extension.dev-packaged.json   # rehearsal
-npx --package tfx-cli tfx extension create --manifest-globs vss-extension.json                # production
+npx --package tfx-cli tfx extension create --manifest-globs vss-extension.dev.json             # hot reload, desktop and phone
+npx --package tfx-cli tfx extension create --manifest-globs vss-extension.dev-localhost.json   # hot reload, this desktop alone
+npx --package tfx-cli tfx extension create --manifest-globs vss-extension.dev-packaged.json    # rehearsal
+npx --package tfx-cli tfx extension create --manifest-globs vss-extension.json                 # production
 ```
 
-Confirm in the output that publisher, extension ID and version are the expected ones. Every Marketplace update needs a version higher than the published one; versions cannot be rolled back by uploading an older package, so a faulty release is fixed by publishing a higher one.
+Confirm in the output that publisher, extension ID and version are the expected ones. The three development manifests share both, so the `.vsix` they write is named the same whenever their versions agree: packaging two of them in a row leaves one file on disk and no way to tell which manifest built it. Publishing reads the manifest directly, so this only matters when a `.vsix` is being inspected or uploaded by hand. Every Marketplace update needs a version higher than the published one; versions cannot be rolled back by uploading an older package, so a faulty release is fixed by publishing a higher one.
 
 ## 6. Publish
 
@@ -194,6 +203,8 @@ npx --package tfx-cli tfx extension publish `
 ```
 
 `--rev-version` bumps and writes the manifest patch version even if a later step fails: review the manifest change before retrying, and commit it deliberately.
+
+Swap `--manifest-globs` for any of the four. A development manifest only needs republishing when the manifest itself changes — a new `baseUri` after a DHCP move, or a switch between the network and `localhost` variants — never because the source changed.
 
 Sharing only makes a private extension visible; it does not install it. From the extension page, select **Get it free**, choose the organization and install; an administrator must approve. Verify under **Organization settings → Extensions**.
 

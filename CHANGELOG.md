@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.9.0
+
+- **Markdown preview.** A `.md` file can be read rendered, instead of as a diff.
+- **Inline or side by side is now a dropdown**, with `Preview` as a third entry on Markdown files.
+- **View settings**, behind the equalizer button beside it: show and diff white space, enable word wrap, keep enclosing scopes on screen. The first two are the switches the native Files tab has.
+- **The sticky header names the block.** In C# and Java it read `{`: Monaco folds those languages by indentation, and with the brace on its own line that is where the indentation increases. It now shows the line that opens the block — the `foreach`, the method, the class.
+- For contributors: one `npm run dev` serves the desktop and the phone, and the development manifests choose which — `vss-extension.dev.json` on the machine's network address, `vss-extension.dev-localhost.json` on the loopback, one extension either way.
+
+## 0.8.0
+
+- **Works on a phone.** Below 860px the file tree becomes a panel over the diff, the step strip a menu listing every step, the diff unified with long lines wrapped, and the toolbar carries the previous and next file.
+- **Full screen**, which hands the whole page to the tab: on a phone the tab is otherwise a few hundred pixels tall.
+- **Links back to a comment.** A share icon on each comment copies a link carrying the file, the thread and the comment; opening it lands on the right step and file, with that comment flashing once.
+- **Sign-off can be `Approve with suggestions`** (vote `5`), not only `Approve` (vote `10`).
+
 ## 0.7.1
 
 - **Comments no longer scroll sideways with the code.** A comment in the diff used to be laid out
