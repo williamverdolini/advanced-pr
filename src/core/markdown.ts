@@ -12,7 +12,16 @@ export type MarkdownBlock =
   | { kind: "heading"; level: number; content: MarkdownInline[] }
   | { kind: "quote"; lines: MarkdownInline[][] }
   | { kind: "list"; ordered: boolean; items: MarkdownInline[][] }
-  | { kind: "codeBlock"; language?: string; value: string };
+  | { kind: "codeBlock"; language?: string; value: string }
+  | {
+      kind: "table";
+      header: MarkdownInline[][];
+      /** One per column, from the delimiter row; `undefined` is the default. */
+      alignments: readonly MarkdownTableAlignment[];
+      rows: MarkdownInline[][][];
+    };
+
+export type MarkdownTableAlignment = "left" | "center" | "right" | undefined;
 
 /**
  * The subset of Markdown the comment editor can produce, parsed into a tree of
@@ -85,6 +94,13 @@ export function parseMarkdown(text: string): MarkdownBlock[] {
       continue;
     }
 
+    if (startsTable(lines, index)) {
+      const table = parseTable(lines, index);
+      blocks.push(table.block);
+      index = table.next;
+      continue;
+    }
+
     const paragraph: MarkdownInline[][] = [];
     while (
       index < lines.length &&
@@ -93,7 +109,9 @@ export function parseMarkdown(text: string): MarkdownBlock[] {
       !/^>\s?/.test(lines[index]) &&
       !/^#{1,6}\s/.test(lines[index]) &&
       !bullet.test(lines[index]) &&
-      !numbered.test(lines[index])
+      !numbered.test(lines[index]) &&
+      // A table interrupts a paragraph, the way a heading does.
+      !startsTable(lines, index)
     ) {
       paragraph.push(parseInline(lines[index]));
       index += 1;
@@ -127,6 +145,84 @@ const inlinePattern = new RegExp(
  * rather than the comment itself. Mentions become the person's name: the raw
  * `@<GUID>` token is unreadable, and it is what the tree used to show.
  */
+/**
+ * A table is a header row and a delimiter row under it, with the same number of
+ * cells in both. Both conditions are needed: a line of prose containing a pipe
+ * is not a table, and neither is a header with nothing under it.
+ */
+function startsTable(lines: readonly string[], index: number): boolean {
+  const header = lines[index];
+  const delimiter = lines[index + 1];
+  if (header === undefined || delimiter === undefined || !header.includes("|")) {
+    return false;
+  }
+
+  const cells = splitTableRow(delimiter);
+  return (
+    cells.length === splitTableRow(header).length &&
+    cells.length > 0 &&
+    cells.every((cell) => /^:?-+:?$/.test(cell))
+  );
+}
+
+function parseTable(
+  lines: readonly string[],
+  index: number,
+): { block: MarkdownBlock; next: number } {
+  const header = splitTableRow(lines[index]).map(parseInline);
+  const alignments = splitTableRow(lines[index + 1]).map(readAlignment);
+  const rows: MarkdownInline[][][] = [];
+
+  let next = index + 2;
+  while (next < lines.length && lines[next].trim() && lines[next].includes("|")) {
+    const cells = splitTableRow(lines[next]);
+    // Padded and truncated to the header's width: a row with the wrong number
+    // of cells is common in a hand-written table, and it still has to be a grid.
+    rows.push(header.map((_column, cell) => parseInline(cells[cell] ?? "")));
+    next += 1;
+  }
+
+  return { block: { kind: "table", header, alignments, rows }, next };
+}
+
+/**
+ * The cells of one row, split on the pipes that are not escaped — a pipe inside
+ * a code span separates cells unless it carries a backslash, which is what
+ * GitHub does and what a table written for the pull request already assumes.
+ * The outer pipes are optional, so they are dropped before splitting rather
+ * than left to produce an empty cell at each end.
+ */
+function splitTableRow(line: string): string[] {
+  const inner = line.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "");
+  const cells: string[] = [];
+  let cell = "";
+
+  for (let index = 0; index < inner.length; index += 1) {
+    const character = inner[index];
+    if (character === "\\" && inner[index + 1] === "|") {
+      cell += "|";
+      index += 1;
+    } else if (character === "|") {
+      cells.push(cell);
+      cell = "";
+    } else {
+      cell += character;
+    }
+  }
+  cells.push(cell);
+
+  return cells.map((value) => value.trim());
+}
+
+function readAlignment(cell: string): MarkdownTableAlignment {
+  const left = cell.startsWith(":");
+  const right = cell.endsWith(":");
+  if (left && right) {
+    return "center";
+  }
+  return right ? "right" : left ? "left" : undefined;
+}
+
 export function toPlainText(
   content: string,
   resolveMention?: (id: string) => { displayName: string } | undefined,
@@ -160,6 +256,12 @@ export function toPlainText(
           return flattenInline(block.content);
         case "list":
           return block.items.map(flattenInline).join(" ");
+        // Cell by cell, in reading order: a summary of a table is its contents,
+        // and its shape does not survive one line of text anyway.
+        case "table":
+          return [block.header, ...block.rows]
+            .map((row) => row.map(flattenInline).join(" "))
+            .join(" ");
         default:
           return block.lines.map(flattenInline).join(" ");
       }

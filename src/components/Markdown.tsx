@@ -4,6 +4,7 @@ import {
   safeImageHref,
   type MarkdownBlock,
   type MarkdownInline,
+  type MarkdownTableAlignment,
 } from "../core/markdown";
 import { AttachmentContext } from "./attachmentContext";
 import { MentionContext } from "./mentionContext";
@@ -28,6 +29,11 @@ export function Markdown({ content, className }: MarkdownProps): React.ReactElem
       ))}
     </div>
   );
+}
+
+/** Undefined leaves the alignment to the stylesheet, which is what the default is. */
+function alignment(value: MarkdownTableAlignment): React.CSSProperties | undefined {
+  return value ? { textAlign: value } : undefined;
 }
 
 function Block({ block }: { block: MarkdownBlock }): React.ReactElement {
@@ -69,6 +75,36 @@ function Block({ block }: { block: MarkdownBlock }): React.ReactElement {
             </li>
           ))}
         </ul>
+      );
+    case "table":
+      return (
+        // The table keeps its own scroll: a column of prose in a narrow pane
+        // wraps, but a table wide enough to need it must not take the page
+        // sideways with it.
+        <div className="markdown-table">
+          <table>
+            <thead>
+              <tr>
+                {block.header.map((cell, index) => (
+                  <th key={index} style={alignment(block.alignments[index])}>
+                    <Inline nodes={cell} />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {block.rows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {row.map((cell, index) => (
+                    <td key={index} style={alignment(block.alignments[index])}>
+                      <Inline nodes={cell} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       );
     default:
       return (
