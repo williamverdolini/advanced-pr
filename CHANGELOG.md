@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.3
+
+- **The view settings are remembered.** White space, word wrap and sticky scroll now survive a refresh and hold for every pull request, per browser profile, until they are changed again.
+- **Opening a comment no longer blanks the tab.** Scrolling to a comment is retried while the diff settles, so it could run while the editor still held the file open before it; asking that shorter file for a line it does not have threw where nothing catches it. The line is now clamped to the file actually loaded, and the retry lands on the real one.
+
 ## 0.9.2
 
 - **A comment in the file tree shows who opened it**, as their picture, in place of the line number it used to carry — initials when the picture does not load. The line moved into the row's tooltip, beside the author's name.

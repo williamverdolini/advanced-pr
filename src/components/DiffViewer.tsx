@@ -245,8 +245,21 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
       return;
     }
 
-    const line = Math.max(1, pending.target.line);
     const sideEditor = editor.sideEditor(pending.target.side);
+    const model = sideEditor.getModel();
+    if (!model) {
+      return;
+    }
+
+    // Clamped against the model, not just against 1: Monaco throws on a line it
+    // does not have, and there is a window where it does not have this one. The
+    // reveal outlives the click that asked for it — it is re-applied as the diff
+    // and every comment zone settle — so it can run while the editor still holds
+    // the file that was open before, which may be shorter than the line asked
+    // for. The throw came out of a ResizeObserver, where nothing catches it, and
+    // took the whole tab white. Being re-applied is also why clamping is enough:
+    // the next pass, once the right model is in, lands on the real line.
+    const line = Math.min(Math.max(1, pending.target.line), model.getLineCount());
     // The comment is a view zone hanging under its line, and it is the comment
     // that was asked for: scrolling to where the line ends puts the card itself
     // at the top of the screen. `getBottomForLineNumber` is that offset — the

@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "advanced-pr-dev",
   "publisher": "NebulaImprover",
-  "version": "0.9.4",
+  "version": "0.9.6",
   "name": "Advanced PR Review (Development)",
   "description": "Development build of Advanced PR Review, served from the dev machine on the network.",
   "icons": { "default": "images/icon.png" },
