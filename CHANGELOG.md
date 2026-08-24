@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.4
+
+- **Markdown tables render as tables**, in the preview and in comments, instead of as rows of text with pipes in them. Alignments, escaped pipes and outer pipes left off are all read; a table too wide for the pane scrolls on its own rather than taking the page with it.
+
 ## 0.9.3
 
 - **The view settings are remembered.** White space, word wrap and sticky scroll now survive a refresh and hold for every pull request, per browser profile, until they are changed again.

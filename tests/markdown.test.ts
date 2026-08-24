@@ -140,3 +140,74 @@ describe("comment markdown", () => {
     expect(blocks).toEqual([{ kind: "codeBlock", language: undefined, value: "still code" }]);
   });
 });
+
+describe("tables", () => {
+  const table = [
+    "| ID | Invariant | Origin |",
+    "|---|---|---|",
+    "| INV-SQRY-001 | The mapping is the sole signal. | [19192](https://example.org/19192) FR-005 |",
+  ].join("\n");
+
+  it("parses a header and its rows", () => {
+    const [block] = parseMarkdown(table);
+    if (block.kind !== "table") {
+      throw new Error("expected a table");
+    }
+    expect(block.header).toHaveLength(3);
+    expect(block.rows).toHaveLength(1);
+  });
+
+  it("keeps the inline markup inside a cell", () => {
+    const [block] = parseMarkdown(table);
+    if (block.kind !== "table") {
+      throw new Error("expected a table");
+    }
+    expect(block.rows[0][2].some((node) => node.kind === "link")).toBe(true);
+  });
+
+  it("summarises a table as its cells, in reading order", () => {
+    expect(toPlainText("| ID |\n|---|\n| INV-SQRY-001 |")).toBe("ID INV-SQRY-001");
+  });
+
+  it("reads the alignments off the delimiter row", () => {
+    const source = "| a | b | c | d |\n|:---|---:|:---:|---|\n| 1 | 2 | 3 | 4 |";
+    const [block] = parseMarkdown(source);
+    if (block.kind !== "table") {
+      throw new Error("expected a table");
+    }
+    expect(block.alignments).toEqual(["left", "right", "center", undefined]);
+  });
+
+  it("pads and truncates a row to the header's width", () => {
+    const [block] = parseMarkdown("| a | b |\n|---|---|\n| 1 |\n| 1 | 2 | 3 |");
+    if (block.kind !== "table") {
+      throw new Error("expected a table");
+    }
+    expect(block.rows.map((row) => row.length)).toEqual([2, 2]);
+  });
+
+  it("splits on unescaped pipes only", () => {
+    const source = "| a | b |\n|---|---|\n| one \\| two | three |";
+    const [block] = parseMarkdown(source);
+    if (block.kind !== "table") {
+      throw new Error("expected a table");
+    }
+    expect(block.rows[0]).toHaveLength(2);
+    expect(toPlainText(source)).toContain("one | two");
+  });
+
+  it("reads a table written without the outer pipes", () => {
+    expect(parseMarkdown("a | b\n--- | ---\n1 | 2")[0].kind).toBe("table");
+  });
+
+  it("leaves prose that merely contains a pipe alone", () => {
+    expect(parseMarkdown("a | b\nand more prose")[0].kind).toBe("paragraph");
+    // A header row with nothing under it is not a table either.
+    expect(parseMarkdown("| a | b |")[0].kind).toBe("paragraph");
+  });
+
+  it("lets a table interrupt a paragraph, and ends it at a blank line", () => {
+    const blocks = parseMarkdown("Some prose\n| a | b |\n|---|---|\n| 1 | 2 |\n\nAfter");
+    expect(blocks.map((block) => block.kind)).toEqual(["paragraph", "table", "paragraph"]);
+  });
+});

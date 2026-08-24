@@ -1112,8 +1112,39 @@ body,
 .markdown-body ul,
 .markdown-body ol,
 .markdown-body pre,
-.markdown-body blockquote {
+.markdown-body blockquote,
+.markdown-body .markdown-table {
   margin: 4px 0;
+}
+
+/* The scroll belongs to the table, not to the page: a table too wide for the
+   pane must not push the diff or the comment sideways with it. */
+.markdown-body .markdown-table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.markdown-body table {
+  border-collapse: collapse;
+  /* Full width when it fits, its own width when it does not: a table of two
+     short columns should not be stretched across a wide pane, and one with a
+     paragraph in a cell has to be allowed past the pane before it scrolls. */
+  min-width: 100%;
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: 4px 8px;
+  border: 1px solid rgba(var(--palette-neutral-20, 200, 200, 200), 1);
+  /* Cells hold sentences here, not values: they wrap and align to the top, so a
+     long cell does not centre itself against its short neighbours. */
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-body th {
+  background: rgba(var(--palette-neutral-4, 244, 244, 244), 1);
+  font-weight: 600;
 }
 
 .markdown-body ul,
