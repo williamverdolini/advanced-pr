@@ -9,6 +9,7 @@ import {
   type GitPullRequestCommentThread,
   type IdentityRefWithVote,
 } from "azure-devops-extension-api/Git";
+import type { IdentityRef } from "azure-devops-extension-api/WebApi";
 import { imageMediaType, uniqueAttachmentName } from "../core/attachments";
 import { classifyFileChange, type FileChangeKind } from "../core/changeType";
 import { languageForPath } from "../core/language";
@@ -100,6 +101,8 @@ export interface ReviewComment {
   id: number;
   authorId: string;
   authorName: string;
+  /** The author's picture, when the identity carries one. */
+  authorImageUrl?: string;
   content: string;
   publishedDate: string;
   likeCount: number;
@@ -557,6 +560,18 @@ export async function loadCommentAttachment(
   return new Blob([content], { type: imageMediaType(fileName) ?? "application/octet-stream" });
 }
 
+/**
+ * The identity's picture. `imageUrl` is the deprecated field and the `_links`
+ * entry the current one, so the link wins and the old field is the fallback for
+ * a server that still only sends it. Typed loosely because `_links` is `any` in
+ * the API contract itself.
+ */
+function avatarHref(author: IdentityRef): string | undefined {
+  const links = author._links as { avatar?: { href?: unknown } } | undefined;
+  const href = links?.avatar?.href;
+  return typeof href === "string" && href ? href : author.imageUrl || undefined;
+}
+
 function mapPullRequestState(status: PullRequestStatus): PullRequestState {
   switch (status) {
     case PullRequestStatus.Active:
@@ -600,6 +615,7 @@ function mapReviewThread(thread: GitPullRequestCommentThread): ReviewThread {
         id: comment.id,
         authorId: comment.author.id,
         authorName: comment.author.displayName,
+        authorImageUrl: avatarHref(comment.author),
         content: comment.content,
         publishedDate: comment.publishedDate.toISOString(),
         likeCount: comment.usersLiked?.length ?? 0,
