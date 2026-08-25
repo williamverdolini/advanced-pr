@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.5
+
+- **A resolved comment starts folded** in the diff, and folds itself when you press `Resolve` or `Reply & resolve`. Unfolding one to read it holds until you open another file; reopening it brings the card back.
+- **A folded comment is still reachable**: its glyph stays in the margin, and one with no line on the side being shown keeps a single row above the file instead of disappearing.
+- **A comment in the file tree shows what was asked, not the last reply.** Text and picture both come from the comment that opened the thread, and the replies are counted at the end of the row.
+
 ## 0.9.4
 
 - **Markdown tables render as tables**, in the preview and in comments, instead of as rows of text with pipes in them. Alignments, escaped pipes and outer pipes left off are all read; a table too wide for the pane scrolls on its own rather than taking the page with it.

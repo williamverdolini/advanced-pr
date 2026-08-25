@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildInlineZones, type InlineZoneThread } from "../src/core/inlineZones";
+import {
+  buildInlineZones,
+  type DiffSide,
+  type InlineZoneThread,
+} from "../src/core/inlineZones";
+import { collapsedThreadIds } from "../src/core/threadCollapse";
 
 const anchored = (id: number, startLine: number, isOpen = true): InlineZoneThread => ({
   id,
@@ -91,16 +96,34 @@ describe("inline zones", () => {
     ]);
   });
 
-  it("mounts no zone for a collapsed thread", () => {
-    const threads = [anchored(1, 5), anchored(2, 9), { id: 7, isOpen: true }];
+  it("mounts no zone for a collapsed anchored thread, its glyph being the way back", () => {
+    const threads = [anchored(1, 5), anchored(2, 9)];
 
     const { zones } = buildInlineZones({
       filePath: "src/a.ts",
       threads,
-      collapsedThreadIds: new Set([2, 7]),
+      collapsedThreadIds: new Set([2]),
     });
 
     expect(zones.map((zone) => zone.key)).toEqual(["src/a.ts::thread-1"]);
+  });
+
+  it("still lists a collapsed thread that has no anchor at all", () => {
+    // Nothing in the margin points at a thread with no line, so removing its
+    // row would leave the reader no way to reach it again.
+    const threads = [anchored(1, 5), { id: 7, isOpen: true }];
+
+    const { zones } = buildInlineZones({
+      filePath: "src/a.ts",
+      threads,
+      collapsedThreadIds: new Set([7]),
+    });
+
+    expect(zones.map((zone) => zone.key)).toEqual([
+      "src/a.ts::orphans",
+      "src/a.ts::thread-1",
+    ]);
+    expect(zones[0].threadIds).toEqual([7]);
   });
 
   it("places the draft zone at the end of the selected range", () => {
@@ -137,5 +160,69 @@ describe("inline zones", () => {
 
     expect(hiddenThreadCount).toBe(2);
     expect(zones.map((zone) => zone.threadIds[0])).toEqual([3, 4]);
+  });
+});
+
+// The pair below is what the reader actually sees: `collapsedThreadIds` decides
+// which threads are folded, `buildInlineZones` decides which get a card. A
+// resolved thread is only born folded if both agree, and the regression that
+// prompted these was in the second half of that sentence.
+describe("a resolved thread is born folded", () => {
+  const resolved = (id: number, startLine: number, side: DiffSide = "right"): InlineZoneThread => ({
+    id,
+    isOpen: false,
+    position: { side, startLine },
+  });
+
+  it("mounts no zone for it, and keeps the open ones", () => {
+    const threads = [resolved(1, 4), anchored(2, 9)];
+    const { zones } = buildInlineZones({
+      filePath: "src/a.ts",
+      threads,
+      collapsedThreadIds: collapsedThreadIds(threads, new Map()),
+    });
+
+    expect(zones.map((zone) => zone.key)).toEqual(["src/a.ts::thread-2"]);
+  });
+
+  it("keeps it in the orphans zone, where there is no glyph to bring it back", () => {
+    // Anchored to the base side, which a unified diff does not render. Folding
+    // an anchored thread hides its card and leaves its glyph; folding one of
+    // these would leave nothing at all, so the row stays and the caller draws
+    // it folded.
+    const threads = [resolved(1, 1, "left"), { ...resolved(2, 3, "left"), isOpen: true }];
+    const { zones } = buildInlineZones({
+      filePath: "src/a.ts",
+      threads,
+      visibleSides: ["right"],
+      collapsedThreadIds: collapsedThreadIds(threads, new Map()),
+    });
+
+    expect(zones).toHaveLength(1);
+    expect(zones[0].kind).toBe("orphans");
+    expect(zones[0].threadIds).toEqual([1, 2]);
+  });
+
+  it("is shown again once the reader asks for it, and folded again on the next file", () => {
+    const threads = [resolved(1, 4)];
+    // What selecting the thread from the tree records.
+    const asked = new Map([[1, false]]);
+    expect(
+      buildInlineZones({
+        filePath: "src/a.ts",
+        threads,
+        collapsedThreadIds: collapsedThreadIds(threads, asked),
+      }).zones,
+    ).toHaveLength(1);
+
+    // What opening a file records: the overrides are dropped, so the default
+    // applies again.
+    expect(
+      buildInlineZones({
+        filePath: "src/b.ts",
+        threads,
+        collapsedThreadIds: collapsedThreadIds(threads, new Map()),
+      }).zones,
+    ).toHaveLength(0);
   });
 });

@@ -570,7 +570,7 @@ body,
   display: grid;
   /* Dot, avatar, preview: the middle column is the avatar's own size, and the
      preview is the one that gives way, being the one that can be trimmed. */
-  grid-template-columns: 10px 16px minmax(0, 1fr);
+  grid-template-columns: 10px 16px minmax(0, 1fr) auto;
   align-items: center;
   gap: 5px;
   width: 100%;
@@ -611,6 +611,18 @@ body,
 .thread-state.resolved {
   border: 1px solid rgba(var(--palette-neutral-20, 200, 200, 200), 1);
   background: transparent;
+}
+
+/* At the end of the row, where a count belongs: the preview is the column that
+   gives way, so the number stays readable on a pane narrow enough to trim it. */
+.file-thread-replies {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Same 16px coin the native Files tab uses, so a row of ours and a row of
@@ -996,6 +1008,56 @@ body,
   margin: 0;
   color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
   font-size: 0.6875rem;
+}
+
+/* A folded thread, in the height of one row: the same card, said in one line,
+   so the code underneath is not paid for a discussion that is settled. */
+.inline-thread-folded {
+  display: grid;
+  grid-template-columns: 10px auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 26px;
+  padding: 3px 8px;
+  border: 1px solid rgba(var(--palette-neutral-10, 218, 218, 218), 1);
+  border-left: 3px solid rgba(var(--palette-neutral-20, 200, 200, 200), 1);
+  border-radius: 2px;
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  background: var(--background-color, #fff);
+  font: inherit;
+  font-size: 0.75rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inline-thread-folded:hover,
+.inline-thread-folded:focus-visible {
+  border-color: rgba(var(--palette-neutral-20, 200, 200, 200), 1);
+  background: rgba(var(--palette-neutral-4, 244, 244, 244), 1);
+  outline: none;
+}
+
+.inline-thread-folded-author {
+  color: var(--text-primary-color, rgba(0, 0, 0, 0.9));
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* The preview is the column that gives way; the reply count stays readable. */
+.inline-thread-folded-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inline-thread-folded-replies {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.inline-thread-folded-replies::before {
+  content: "↩ ";
 }
 
 .inline-thread {

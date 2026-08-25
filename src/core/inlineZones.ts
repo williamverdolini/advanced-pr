@@ -76,8 +76,12 @@ export function buildInlineZones({
   const expanded = collapsedThreadIds
     ? threads.filter((thread) => !collapsedThreadIds.has(thread.id))
     : threads;
+  // Folding an anchored thread is safe: its glyph stays in the margin, and that
+  // glyph is how it comes back. A thread with no line on a rendered side has no
+  // glyph to come back from, so it keeps its place in the orphans zone whether
+  // it is folded or not — the caller draws a folded one as a single row.
   const anchored = expanded.filter(isAnchorable);
-  const unanchored = expanded.filter((thread) => !isAnchorable(thread));
+  const unanchored = threads.filter((thread) => !isAnchorable(thread));
   const kept = capThreads(anchored, selectedThreadId, maxThreadZones);
   const zones: InlineZoneDescriptor[] = [];
 
