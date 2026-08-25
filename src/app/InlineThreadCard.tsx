@@ -28,6 +28,12 @@ export interface InlineThreadCardProps {
   /** The highlight has played out; it must not play again on the next render. */
   onHighlightShown: () => void;
   onCollapse: () => void;
+  /**
+   * The thread was resolved or reopened. Whether its card stays on screen is
+   * the workspace's call, not this card's: resolving one is how a reader says
+   * they are done with it.
+   */
+  onResolvedChange: () => void;
   onRefresh: () => Promise<unknown>;
 }
 
@@ -45,6 +51,7 @@ export function InlineThreadCard({
   onSelect,
   onHighlightShown,
   onCollapse,
+  onResolvedChange,
   onRefresh,
 }: InlineThreadCardProps): React.ReactElement {
   const [replyOpen, setReplyOpen] = React.useState(false);
@@ -69,6 +76,7 @@ export function InlineThreadCard({
       await replyToThread(workspace, thread.id, replyText.trim());
       if (thenToggleState) {
         await setThreadResolved(workspace, thread.id, thread.isOpen);
+        onResolvedChange();
       }
       setReplyText("");
       setReplyOpen(false);
@@ -219,7 +227,10 @@ export function InlineThreadCard({
             primary={thread.isOpen}
             disabled={pending}
             onClick={() =>
-              void runAndRefresh(() => setThreadResolved(workspace, thread.id, thread.isOpen))
+              void runAndRefresh(async () => {
+                await setThreadResolved(workspace, thread.id, thread.isOpen);
+                onResolvedChange();
+              })
             }
           />
         </div>

@@ -257,15 +257,17 @@ function TreeNodes({
               {fileThreads.length > 0 && (
                 <ul className="file-thread-list" role="group">
                   {fileThreads.map((thread) => {
-                    const lastComment = thread.comments.at(-1);
-                    // Who opened the thread, not who replied last: the row is
-                    // the thread, and an avatar that changed on every reply
-                    // would stop being the way to recognise it.
+                    // The row is the thread, and the thread is what was asked
+                    // in the first place: avatar and text both come from the
+                    // comment that opened it, so they are one person saying one
+                    // thing. The replies are counted at the end of the row
+                    // instead, which is what says the discussion moved on.
                     const openedBy = thread.comments[0];
+                    const replyCount = Math.max(0, thread.comments.length - 1);
                     // A summary line, so mention tokens are reduced to names
                     // rather than shown as raw identity ids.
-                    const preview = lastComment
-                      ? toPlainText(lastComment.content, resolveMention)
+                    const preview = openedBy
+                      ? toPlainText(openedBy.content, resolveMention)
                       : undefined;
                     return (
                       <li key={thread.id} role="treeitem" aria-level={level + 1}>
@@ -284,6 +286,9 @@ function TreeNodes({
                             openedBy?.authorName,
                             thread.position ? `L${thread.position.startLine}` : undefined,
                             preview,
+                            replyCount > 0
+                              ? `${replyCount} ${replyCount === 1 ? "reply" : "replies"}`
+                              : undefined,
                           ]
                             .filter(Boolean)
                             .join(" · ")}
@@ -307,6 +312,15 @@ function TreeNodes({
                           <span className="file-thread-preview">
                             {preview || "Comment"}
                           </span>
+                          {replyCount > 0 && (
+                            <span
+                              className="file-thread-replies"
+                              title={`${replyCount} ${replyCount === 1 ? "reply" : "replies"}`}
+                            >
+                              <Icon iconName="Reply" size={IconSize.small} />
+                              {replyCount}
+                            </span>
+                          )}
                         </button>
                       </li>
                     );

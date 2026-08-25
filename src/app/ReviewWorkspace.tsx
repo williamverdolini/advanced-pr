@@ -32,6 +32,8 @@ import { adjacentFile, fileNameFromPath, nextFileToReview } from "../core/fileTr
 import type { InlineZoneDescriptor } from "../core/inlineZones";
 import type { ReviewStep } from "../core/reviewPlan";
 import { maxSplitterWidth, minSplitterWidth } from "../core/splitterWidth";
+import { toPlainText } from "../core/markdown";
+import { collapsedThreadIds } from "../core/threadCollapse";
 import { indexThreadsByFile } from "../core/threadIndex";
 import {
   createAnchoredThread,
@@ -212,12 +214,18 @@ export function ReviewWorkspace({
     () => new Map(fileThreads.map((thread) => [thread.id, thread])),
     [fileThreads],
   );
+  // A resolved thread is born folded; what the reader has since decided wins.
+  const collapsedIds = React.useMemo(
+    () => collapsedThreadIds(fileThreads, collapsed.overrides),
+    [fileThreads, collapsed.overrides],
+  );
+
   const inlineDiff = useInlineDiff({
     filePath: selectedFile?.path,
     threads: fileThreads,
     draft,
     selectedThreadId,
-    collapsedThreadIds: collapsed.collapsedThreadIds,
+    collapsedThreadIds: collapsedIds,
     contentOnly,
     contentSide,
     splitView,
@@ -259,6 +267,7 @@ export function ReviewWorkspace({
     setSelectedStepId(step.stepId);
     setSelectedThreadId(undefined);
     setDraft(undefined);
+    collapsed.reset();
     setSelectedFile(
       nextFileToReview(
         workspace.files.filter((file) => step.files.includes(file.path)),
@@ -292,8 +301,12 @@ export function ReviewWorkspace({
       setDraft(undefined);
       setFilesOpen(false);
       selection.clear();
+      // A new file starts from the defaults: resolved threads folded, whatever
+      // was unfolded on the file before. `selectThread` deliberately does not
+      // do this — reaching a thread from the tree is a request to see it.
+      collapsed.reset();
     },
-    [selection],
+    [collapsed, selection],
   );
 
   // Reaching a thread from the tree must always show it, even if its glyph was
@@ -310,10 +323,10 @@ export function ReviewWorkspace({
 
   const toggleThreadFromGlyph = React.useCallback(
     (threadId: number): void => {
-      collapsed.toggle(threadId);
+      collapsed.toggle(threadId, collapsedIds.has(threadId));
       setSelectedThreadId(threadId);
     },
-    [collapsed],
+    [collapsed, collapsedIds],
   );
 
   const requestComment = React.useCallback(
@@ -358,7 +371,31 @@ export function ReviewWorkspace({
               : "Comments anchored to a side that is not shown, or without a line anchor"}
           </p>
         )}
-        {threads.map((thread) => (
+        {threads.map((thread) =>
+          collapsedIds.has(thread.id) ? (
+            // A thread with no line has no glyph in the margin to bring it
+            // back, so folded it becomes a row rather than nothing: the state,
+            // who asked, and what they asked, in the height of one line.
+            <button
+              key={thread.id}
+              type="button"
+              className="inline-thread-folded"
+              onClick={() => collapsed.setCollapsed(thread.id, false)}
+            >
+              <span className={thread.isOpen ? "thread-state open" : "thread-state resolved"} />
+              <span className="inline-thread-folded-author">
+                {thread.comments[0]?.authorName}
+              </span>
+              <span className="inline-thread-folded-preview">
+                {toPlainText(thread.comments[0]?.content ?? "", resolveMention) || "Comment"}
+              </span>
+              {thread.comments.length > 1 && (
+                <span className="inline-thread-folded-replies">
+                  {thread.comments.length - 1}
+                </span>
+              )}
+            </button>
+          ) : (
           <InlineThreadCard
             key={thread.id}
             workspace={workspace}
@@ -375,9 +412,13 @@ export function ReviewWorkspace({
             onSelect={setSelectedThreadId}
             onHighlightShown={() => setLinked(undefined)}
             onCollapse={() => collapsed.setCollapsed(thread.id, true)}
+            // Nothing to fold or unfold by hand: dropping the decision lets the
+            // thread's new state speak, which folds it when it was resolved.
+            onResolvedChange={() => collapsed.clearOverride(thread.id)}
             onRefresh={onRefresh}
           />
-        ))}
+          ),
+        )}
       </div>
     );
   };
