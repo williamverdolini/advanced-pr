@@ -1,5 +1,5 @@
 import { stableHash } from "./hash";
-import { markerPattern } from "./marker";
+import { readMarkerPayload } from "./marker";
 
 /**
  * When feedback on a step stops counting.
@@ -83,13 +83,13 @@ interface ParsedSection {
 }
 
 export function parsePlanMarker(content: string): ReviewPlanMarker | undefined {
-  const match = content.match(markerPattern);
-  if (!match) {
+  const payload = readMarkerPayload(content);
+  if (!payload) {
     return undefined;
   }
 
   try {
-    const value = JSON.parse(match[1]) as Partial<ReviewPlanMarker> & { kind?: string };
+    const value = JSON.parse(payload) as Partial<ReviewPlanMarker> & { kind?: string };
     if (
       value.kind !== "review-plan" ||
       typeof value.planId !== "string" ||

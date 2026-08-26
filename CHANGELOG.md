@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.6
+
+- **Notification mails no longer carry the extension's identifiers.** A step approval arrived in everyone's inbox with a line of ids under it: the marker was an HTML comment, which the web interface hides but the mail prints in full. It is now a Markdown link reference definition, which the mail drops. Decisions and plans recorded under the old marker are still read, so nothing is invalidated and there is nothing to migrate.
+- **Word wrap reaches the left column** in side by side. Monaco stops the original editor from wrapping while the diff is inline — it is not on screen — and did not undo it when the two sides came back, so that column ignored the switch.
+- **The previous and next file arrows are on every width**, not only on a phone. Stepping through a step's files in order is the review itself; doing it from the tree means finding the current file in it first.
+
 ## 0.9.5
 
 - **A resolved comment starts folded** in the diff, and folds itself when you press `Resolve` or `Reply & resolve`. Unfolding one to read it holds until you open another file; reopening it brings the card back.

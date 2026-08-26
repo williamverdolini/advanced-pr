@@ -60,11 +60,13 @@ Pull requests whose plan predates this rule keep the original one, where any cha
 
 The plan is a plain pull request comment: anything that can post a comment as the pull request author can create it, an agent using the REST API included. What makes it a plan is the trailing marker, which must declare the invalidation rule to get the behaviour above:
 
-```html
-<!-- advanced-pr:v2 {"kind":"review-plan","planId":"550e8400-e29b-41d4-a716-446655440000","version":1,"invalidation":"manual"} -->
+```markdown
+[//]: # (advanced-pr:v3 {"kind":"review-plan","planId":"550e8400-e29b-41d4-a716-446655440000","version":1,"invalidation":"manual"})
 ```
 
 `planId` is any stable identifier — a fresh GUID for a new plan, the same one when revising it, with `version` incremented. Without `"invalidation":"manual"` the plan is read under the original rule, so a tool that omits the field silently gives up the guarantee.
+
+The marker is a Markdown link reference definition, which renders as nothing. It replaces the HTML comment `<!-- advanced-pr:v2 … -->`, which the web interface hides but the notification mail prints in full, under the approval, for everyone on the pull request. Both are still read, so a plan or a decision written under the old envelope keeps working and there is nothing to migrate; new ones should use `v3`. A parenthesis inside the payload has to be escaped as `\(` or `\)`, or it ends the marker early.
 
 ## What it does not do yet
 
