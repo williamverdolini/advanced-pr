@@ -538,3 +538,97 @@ describe("review ledger", () => {
     });
   });
 });
+describe("the envelope a recorded event is written in", () => {
+  const event = {
+    kind: "step-approved" as const,
+    eventId: "5858bf60-458d-4b60-8596-b8d2b61670b6",
+    planId: "8b8cbcc1-6029-4610-a1d2-38ec5fa0eb00",
+    planVersion: 1,
+    planHash: "0babc753",
+    stepId: "step-grid-and-card",
+    iteration: 3,
+    stepFingerprint: "d49c31e3",
+  };
+
+  it("survives a round trip through the newer envelope", () => {
+    const content = formatLedgerEvent("✅ Step approved: Grid and card", event);
+
+    expect(content).toContain("[//]: # (advanced-pr:v3");
+    expect(content).not.toContain("<!--");
+    expect(parseLedgerEvent(content, "reviewer-1", "2026-08-25T09:31:00Z", 42)).toMatchObject(
+      event,
+    );
+  });
+
+  it("still reads a decision recorded before the envelope changed", () => {
+    // The ledger is append-only: every approval already in a pull request is a
+    // v2 comment, and it has to keep counting.
+    const v2 = `✅ Step approved: Grid and card\n\n<!-- advanced-pr:v2 ${JSON.stringify(
+      event,
+    )} -->`;
+
+    expect(parseLedgerEvent(v2, "reviewer-1", "2026-08-25T09:31:00Z", 42)).toMatchObject(event);
+  });
+});
+
+// The question this answers: a pull request already under review holds nothing
+// but v2 comments. Reading them has to keep producing the same approvals, and a
+// new decision written beside them has to join them rather than replace them.
+describe("a review that started before the envelope changed", () => {
+  const payload = {
+    kind: "step-approved" as const,
+    eventId: "event-old",
+    planId: "plan-1",
+    planVersion: 1,
+    planHash: "hash-1",
+    stepId: "step-1",
+  };
+  const asV2 = (value: object): string =>
+    `Step approved\n\n<!-- advanced-pr:v2 ${JSON.stringify(value)} -->`;
+
+  it("still counts an approval recorded in the old envelope", () => {
+    const old = parseLedgerEvent(asV2(payload), "reviewer-1", "2026-08-13T10:00:00Z", 1);
+    expect(old).toBeDefined();
+
+    const state = reduceReviewEvents([old!], currentPlan);
+    expect(state.stepStates.get("reviewer-1")?.get("step-1")).toBe("approved");
+  });
+
+  it("reads both envelopes in the same pull request", () => {
+    const old = parseLedgerEvent(asV2(payload), "reviewer-1", "2026-08-13T10:00:00Z", 1);
+    const fresh = parseLedgerEvent(
+      formatLedgerEvent("Step approved", {
+        ...payload,
+        eventId: "event-new",
+        stepId: "step-2",
+      }),
+      "reviewer-1",
+      "2026-08-25T10:00:00Z",
+      2,
+    );
+
+    const state = reduceReviewEvents([old!, fresh!], currentPlan);
+    const steps = state.stepStates.get("reviewer-1");
+    expect(steps?.get("step-1")).toBe("approved");
+    expect(steps?.get("step-2")).toBe("approved");
+  });
+
+  it("lets a new decision supersede one recorded in the old envelope", () => {
+    // Same reviewer, same step: the later comment wins whichever envelope each
+    // of the two was written in.
+    const old = parseLedgerEvent(asV2(payload), "reviewer-1", "2026-08-13T10:00:00Z", 1);
+    const reversal = parseLedgerEvent(
+      formatLedgerEvent("Changes requested", {
+        ...payload,
+        eventId: "event-new",
+        kind: "step-changes-requested",
+      }),
+      "reviewer-1",
+      "2026-08-25T10:00:00Z",
+      2,
+    );
+
+    const state = reduceReviewEvents([old!, reversal!], currentPlan);
+    expect(state.stepStates.get("reviewer-1")?.get("step-1")).toBe("changes-requested");
+  });
+});

@@ -150,6 +150,13 @@ interface EditorHandle {
   setModels(models: { original?: monaco.editor.ITextModel; modified: monaco.editor.ITextModel }): void;
   clearModels(): void;
   setSideBySide(value: boolean): void;
+  /**
+   * Reading options — wrapping, whitespace marks, the sticky header — set on
+   * the pair rather than on either editor. A diff editor re-derives both of its
+   * children's options from its own whenever any of them changes, so anything
+   * written straight onto a child survives only until the next change.
+   */
+  setTextOptions(options: monaco.editor.IEditorOptions): void;
   /** Whether a change made only of whitespace counts as a difference. */
   setWhitespaceInDiff(value: boolean): void;
   dispose(): void;
@@ -470,28 +477,33 @@ export function DiffViewer<TZone extends DiffZoneAnchor>({
     editorRef.current?.setSideBySide(renderSideBySide);
   }, [renderSideBySide]);
 
+  // Re-applied on the layout as well as on the switch, because of the override
+  // below: nothing else puts it back when the two sides come apart.
   React.useEffect(() => {
     const editor = editorRef.current;
-    editor?.sideEditor("left").updateOptions({ wordWrap: wordWrap ? "on" : "off" });
-    editor?.sideEditor("right").updateOptions({ wordWrap: wordWrap ? "on" : "off" });
-  }, [wordWrap]);
+    editor?.setTextOptions({ wordWrap: wordWrap ? "on" : "off" });
+
+    // While the diff is inline Monaco forces `wordWrapOverride2: "off"` on the
+    // original editor — "never wrap hidden editor" — and does not clear it when
+    // side by side brings that editor back. The override outranks `wordWrap`,
+    // so the left column was the one pane that ignored the switch.
+    editor
+      ?.sideEditor("left")
+      .updateOptions({ wordWrapOverride2: renderSideBySide ? "inherit" : "off" });
+  }, [renderSideBySide, wordWrap]);
 
   // Two settings, one switch: the glyphs make whitespace visible, and the diff
   // option makes it count. Showing marks on a line the comparison has decided
   // is unchanged would be the worse half of the answer on its own.
   React.useEffect(() => {
     const editor = editorRef.current;
-    const renderWhitespace = showWhitespace ? "all" : "selection";
-    editor?.sideEditor("left").updateOptions({ renderWhitespace });
-    editor?.sideEditor("right").updateOptions({ renderWhitespace });
+    editor?.setTextOptions({ renderWhitespace: showWhitespace ? "all" : "selection" });
     editor?.setWhitespaceInDiff(showWhitespace);
   }, [showWhitespace]);
 
   React.useEffect(() => {
     const editor = editorRef.current;
-    const options = { stickyScroll: { enabled: stickyScroll } };
-    editor?.sideEditor("left").updateOptions(options);
-    editor?.sideEditor("right").updateOptions(options);
+    editor?.setTextOptions({ stickyScroll: { enabled: stickyScroll } });
   }, [stickyScroll]);
 
   React.useEffect(() => {
@@ -789,6 +801,7 @@ function createEditorHandle(
         editor.setModel(singleFileSide === "left" ? (original ?? modified) : modified),
       clearModels: () => editor.setModel(null),
       setSideBySide: () => undefined,
+      setTextOptions: (options) => editor.updateOptions(options),
       // Nothing is being compared, so there is no comparison to tune.
       setWhitespaceInDiff: () => undefined,
       dispose: () => editor.dispose(),
@@ -811,6 +824,7 @@ function createEditorHandle(
       original && editor.setModel({ original, modified }),
     clearModels: () => editor.setModel(null),
     setSideBySide: (value) => editor.updateOptions({ renderSideBySide: value }),
+    setTextOptions: (options) => editor.updateOptions(options),
     setWhitespaceInDiff: (value) => editor.updateOptions({ ignoreTrimWhitespace: !value }),
     dispose: () => editor.dispose(),
   };

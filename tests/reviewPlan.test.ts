@@ -8,7 +8,7 @@ import {
 describe("review plan", () => {
   it("reads a v2 marker", () => {
     const marker = parsePlanMarker(
-      '<!-- advanced-pr:v2 {"kind":"review-plan","planId":"plan-1","version":2} -->',
+      '[//]: # (advanced-pr:v3 {"kind":"review-plan","planId":"plan-1","version":2})',
     );
 
     expect(marker).toEqual({ planId: "plan-1", version: 2, invalidation: "plan-hash" });

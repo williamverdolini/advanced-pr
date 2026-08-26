@@ -12,6 +12,7 @@ import {
 import type { IdentityRef } from "azure-devops-extension-api/WebApi";
 import { imageMediaType, uniqueAttachmentName } from "../core/attachments";
 import { classifyFileChange, type FileChangeKind } from "../core/changeType";
+import { formatMarker } from "../core/marker";
 import { languageForPath } from "../core/language";
 import {
   formatLedgerEvent,
@@ -423,12 +424,12 @@ export async function createReviewPlan(
   // Every plan this extension writes opts in to `manual` invalidation: from here
   // on, feedback on a step outlives a revision of the plan around it. A plan
   // posted by hand or by a tool has to carry the field to get the same rule.
-  const marker = `<!-- advanced-pr:v2 ${JSON.stringify({
+  const marker = formatMarker({
     kind: "review-plan",
     planId,
     version,
     invalidation: "manual",
-  })} -->`;
+  });
   const content = `${markdown.trim()}\n\n${marker}`;
   const thread = {
     status: CommentThreadStatus.Active,

@@ -1,4 +1,4 @@
-import { markerPattern } from "./marker";
+import { formatMarker, readMarkerPayload } from "./marker";
 import type { PlanInvalidation } from "./reviewPlan";
 
 export type ReviewEventKind =
@@ -72,7 +72,7 @@ export type LedgerEventPayload = Omit<
 >;
 
 export function formatLedgerEvent(label: string, event: LedgerEventPayload): string {
-  return `${label}\n\n<!-- advanced-pr:v2 ${JSON.stringify(event)} -->`;
+  return `${label}\n\n${formatMarker(event)}`;
 }
 
 export function parseLedgerEvent(
@@ -81,13 +81,13 @@ export function parseLedgerEvent(
   publishedDate: string,
   commentId: number,
 ): ReviewEvent | undefined {
-  const match = content.match(markerPattern);
-  if (!match) {
+  const payload = readMarkerPayload(content);
+  if (!payload) {
     return undefined;
   }
 
   try {
-    const value = JSON.parse(match[1]) as Partial<LedgerEventPayload> & { kind?: string };
+    const value = JSON.parse(payload) as Partial<LedgerEventPayload> & { kind?: string };
     if (
       !isReviewEventKind(value.kind) ||
       typeof value.eventId !== "string" ||

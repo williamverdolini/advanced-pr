@@ -621,37 +621,38 @@ export function ReviewWorkspace({
                   }}
                   onClick={hostFullScreen.toggle}
                 />
-                {/* Only where the tree is behind a panel: with the tree on screen
-                    the next file is one click away in it, and these would be a
-                    second way to do the same thing. */}
+                {/* Only where the tree is behind a panel: with the tree on
+                    screen it already says how many files are left, and opening
+                    a drawer over it would be a second way to reach it. */}
                 {viewport.narrow && (
-                  <>
-                    <Button
-                      subtle
-                      iconProps={{ iconName: "FileCode" }}
-                      text={`${visibleViewedCount}/${visibleFiles.length}`}
-                      ariaLabel="Show the changed files"
-                      tooltipProps={{ text: "Changed files" }}
-                      onClick={() => setFilesOpen(true)}
-                    />
-                    <Button
-                      subtle
-                      iconProps={{ iconName: "ChevronLeft" }}
-                      ariaLabel="Previous file in this step"
-                      tooltipProps={{ text: "Previous file" }}
-                      disabled={!previousFile}
-                      onClick={() => previousFile && selectFile(previousFile)}
-                    />
-                    <Button
-                      subtle
-                      iconProps={{ iconName: "ChevronRight" }}
-                      ariaLabel="Next file in this step"
-                      tooltipProps={{ text: "Next file" }}
-                      disabled={!nextFile}
-                      onClick={() => nextFile && selectFile(nextFile)}
-                    />
-                  </>
+                  <Button
+                    subtle
+                    iconProps={{ iconName: "FileCode" }}
+                    text={`${visibleViewedCount}/${visibleFiles.length}`}
+                    ariaLabel="Show the changed files"
+                    tooltipProps={{ text: "Changed files" }}
+                    onClick={() => setFilesOpen(true)}
+                  />
                 )}
+                {/* On every width, unlike the drawer above. Stepping through a
+                    step's files in order is the review itself, and doing it
+                    from the tree means finding the current file in it first. */}
+                <Button
+                  subtle
+                  iconProps={{ iconName: "ChevronLeft" }}
+                  ariaLabel="Previous file in this step"
+                  tooltipProps={{ text: "Previous file" }}
+                  disabled={!previousFile}
+                  onClick={() => previousFile && selectFile(previousFile)}
+                />
+                <Button
+                  subtle
+                  iconProps={{ iconName: "ChevronRight" }}
+                  ariaLabel="Next file in this step"
+                  tooltipProps={{ text: "Next file" }}
+                  disabled={!nextFile}
+                  onClick={() => nextFile && selectFile(nextFile)}
+                />
               </div>
             </div>
             {planEditorOpen && reviewerId === workspace.authorId && (
