@@ -29,6 +29,24 @@ export interface ReviewEvent {
   stepFingerprint?: string;
 }
 
+/**
+ * Whether recording this event should reach the people watching the pull
+ * request.
+ *
+ * A decision on one step is bookkeeping: with several reviewers and a plan of
+ * seven steps it is dozens of mails saying a box was ticked, sent to everyone
+ * who has ever written in the ledger thread, and the reviewers polled on it
+ * wanted none of them. Those are written as system comments, which Azure DevOps
+ * does not notify on.
+ *
+ * The two that stay are the two nobody can afford to miss. Clearing feedback
+ * takes other people's approvals away and mentions each of them by name, and
+ * the mention is how they find out. A sign-off ends the review.
+ */
+export function notifiesParticipants(kind: ReviewEventKind): boolean {
+  return kind === "feedback-cleared" || kind === "pr-approved" || kind === "pr-rejected";
+}
+
 export type StepReviewStatus = "approved" | "changes-requested";
 
 export interface StepDecision {

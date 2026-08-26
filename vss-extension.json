@@ -2,10 +2,10 @@
   "manifestVersion": 1,
   "id": "advanced-pr",
   "publisher": "NebulaImprover",
-  "version": "0.9.6",
+  "version": "0.9.7",
   "name": "Advanced PR Review",
   "description": "Review large pull requests in explicit steps, with comments inline in the diff.",
-  "public": false,
+  "public": true,
   "icons": { "default": "images/icon.png" },
   "categories": ["Azure Repos"],
   "tags": ["pull request", "code review", "git", "diff", "comments"],
@@ -13,7 +13,8 @@
   "scopes": ["vso.code_write", "vso.threads_full", "vso.extension.data_write"],
   "links": {
     "repository": { "uri": "https://github.com/williamverdolini/advanced-pr" },
-    "issues": { "uri": "https://github.com/williamverdolini/advanced-pr/issues" }
+    "issues": { "uri": "https://github.com/williamverdolini/advanced-pr/issues" },
+    "license": { "uri": "https://github.com/williamverdolini/advanced-pr/blob/main/LICENSE" }
   },
   "repository": {
     "type": "git",

@@ -4,6 +4,7 @@ import {
   formatLedgerEvent,
   hasOutstandingChanges,
   hasOutstandingChangesAfterApproval,
+  notifiesParticipants,
   parseLedgerEvent,
   reduceReviewEvents,
   reviewersWithDecisions,
@@ -630,5 +631,23 @@ describe("a review that started before the envelope changed", () => {
 
     const state = reduceReviewEvents([old!, reversal!], currentPlan);
     expect(state.stepStates.get("reviewer-1")?.get("step-1")).toBe("changes-requested");
+  });
+});
+
+describe("which recorded events reach people's inbox", () => {
+  it("keeps a decision on one step quiet", () => {
+    // The noise the reviewers asked to be rid of: one mail per step, per
+    // reviewer, to everyone who has ever written in the ledger thread.
+    expect(notifiesParticipants("step-approved")).toBe(false);
+    expect(notifiesParticipants("step-changes-requested")).toBe(false);
+    expect(notifiesParticipants("step-reset")).toBe(false);
+  });
+
+  it("announces the two nobody can afford to miss", () => {
+    // Clearing feedback mentions each reviewer whose approval it discards, and
+    // that mention is how they find out; a sign-off ends the review.
+    expect(notifiesParticipants("feedback-cleared")).toBe(true);
+    expect(notifiesParticipants("pr-approved")).toBe(true);
+    expect(notifiesParticipants("pr-rejected")).toBe(true);
   });
 });

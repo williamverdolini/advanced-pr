@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.7
+
+- **Approving a step no longer mails everyone.** A decision on one step was a reply in the ledger thread, so every reviewer who had ever written there got a message for every step anybody ticked. Those are now written as system comments, which Azure DevOps does not notify on. Clearing feedback and signing off still do: the first mentions each reviewer whose approval it discards, and the mention is how they find out.
+
 ## 0.9.6
 
 - **Notification mails no longer carry the extension's identifiers.** A step approval arrived in everyone's inbox with a line of ids under it: the marker was an HTML comment, which the web interface hides but the mail prints in full. It is now a Markdown link reference definition, which the mail drops. Decisions and plans recorded under the old marker are still read, so nothing is invalidated and there is nothing to migrate.
