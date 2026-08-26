@@ -44,6 +44,6 @@ Azure DevOps Services, and any account with access to the pull request. No confi
 
 There is **no backend**. The extension is a static page that calls the Azure DevOps REST API from your browser, **as you**: comments and votes are attributed to your real account, exactly as if you had used the classic interface.
 
-Nothing is stored outside Azure DevOps: the state of a review is reconstructed from the pull request's own comments every time the tab is opened. The only per-user setting kept, which files you have marked as viewed, lives in Azure DevOps extension storage, scoped to you.
+No server of ours ever sees your code: the state of a review is reconstructed from the pull request's own comments every time the tab is opened. Which files you have marked as viewed is kept in Azure DevOps extension storage, scoped to you. Two reading preferences — the width of the files pane, and the diff view settings behind the toolbar's sliders — are kept in your browser's local storage, on the device you are using, and are never sent anywhere.
 
 **Requested permissions:** read and write code and pull requests (`vso.code_write`), read and write pull request comment threads (`vso.threads_full`), and per-user extension settings (`vso.extension.data_write`).

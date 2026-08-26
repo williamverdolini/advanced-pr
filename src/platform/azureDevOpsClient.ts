@@ -16,6 +16,7 @@ import { formatMarker } from "../core/marker";
 import { languageForPath } from "../core/language";
 import {
   formatLedgerEvent,
+  notifiesParticipants,
   parseLedgerEvent,
   type LedgerEventPayload,
   type ReviewEvent,
@@ -317,16 +318,17 @@ export async function appendLedgerEvent(
   const client = gitClient();
   const { repositoryId, id: pullRequestId, projectId } = workspace;
   const content = formatLedgerEvent(label, event);
-  const comment = {
-    content,
-    commentType: CommentType.Text,
-    parentCommentId: 0,
-  } as Comment;
+  // A system comment is the one kind Azure DevOps does not raise a notification
+  // for, which is what keeps a step decision off everybody's mail. See
+  // `notifiesParticipants` for which events are allowed to be quiet.
+  const commentType = notifiesParticipants(event.kind)
+    ? CommentType.Text
+    : CommentType.System;
 
   try {
     if (workspace.ledgerThreadId) {
       await client.createComment(
-        comment,
+        { content, commentType, parentCommentId: 0 } as Comment,
         repositoryId,
         pullRequestId,
         workspace.ledgerThreadId,
@@ -335,10 +337,16 @@ export async function appendLedgerEvent(
     } else {
       // First event on a pull request with no plan: the ledger thread is opened
       // by whoever records it, and every later event joins it.
+      //
+      // This one comment stays a text comment whatever its kind. Opening a
+      // thread that holds nothing but a system comment is a path Azure DevOps
+      // was never asked to take here, and the cost of it being refused is a
+      // decision that cannot be recorded at all — against one notification, on
+      // the first decision of a pull request that has no plan.
       await client.createThread(
         {
           status: CommentThreadStatus.Active,
-          comments: [comment],
+          comments: [{ content, commentType: CommentType.Text, parentCommentId: 0 } as Comment],
         } as GitPullRequestCommentThread,
         repositoryId,
         pullRequestId,

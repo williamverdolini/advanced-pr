@@ -86,6 +86,8 @@ The extension is a static page that calls the Azure DevOps REST API from the bro
 | `vso.threads_full` | Read and write comment threads, including likes |
 | `vso.extension.data_write` | Store, per user, which files have been marked as viewed |
 
+Two reading preferences are kept in the browser's own local storage instead, on the device in use and nowhere else: the width of the files pane, and the diff view settings. They belong to a browser rather than to a person or a pull request, which is why they are not in extension storage.
+
 Scopes are deliberately kept to this set. Adding one invalidates the extension certificate and requires an administrator to reauthorize the installation, so any addition must be justified, tested in a test organization, and announced before publication. Never add PAT storage, service-account credentials or secrets to the client bundle.
 
 ---
