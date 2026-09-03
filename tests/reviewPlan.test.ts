@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildStepPlan,
   findStepForFile,
+  isActionablePlanWarning,
   parsePlanMarker,
 } from "../src/core/reviewPlan";
 
@@ -361,5 +362,33 @@ describe("review plan", () => {
 
     expect(after.planHash).toBe(before.planHash);
     expect(after.steps.at(-1)?.fingerprint).not.toBe(before.steps.at(-1)?.fingerprint);
+  });
+});
+
+// The banner over the diff shows these; a reviewer who cannot act on one is
+// only being interrupted. See `isActionablePlanWarning`.
+describe("which plan warnings are worth showing", () => {
+  const marker = { planId: "plan-1", version: 1 };
+
+  it("stays quiet about a file the pull request no longer has", () => {
+    expect(
+      isActionablePlanWarning({ kind: "stale-entry", path: "src/gone.ts", message: "…" }),
+    ).toBe(false);
+  });
+
+  it("reports the mistakes that change what gets reviewed", () => {
+    expect(isActionablePlanWarning({ kind: "duplicate-path", message: "…" })).toBe(true);
+    expect(isActionablePlanWarning({ kind: "duplicate-title", message: "…" })).toBe(true);
+    expect(isActionablePlanWarning({ kind: "case-collision", message: "…" })).toBe(true);
+  });
+
+  it("leaves a removed file out of its step, which is why the silence is safe", () => {
+    // Nothing to revise: the plan still reads the same, the file is simply not
+    // in the step, and the step keeps the files it does have.
+    const plan = buildStepPlan("1. Core\n- src/core.ts\n- src/gone.ts", ["src/core.ts"], marker);
+
+    expect(plan.steps[0].files).toEqual(["src/core.ts"]);
+    expect(plan.warnings.map((warning) => warning.kind)).toEqual(["stale-entry"]);
+    expect(plan.warnings.filter(isActionablePlanWarning)).toEqual([]);
   });
 });

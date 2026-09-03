@@ -23,6 +23,12 @@ export interface MarkdownCommentEditorProps {
    * resolving in one go, typically. Hidden when absent.
    */
   secondaryAction?: { label: string; onClick: () => void };
+  /**
+   * Puts the caret in the box as soon as it appears, for an editor that opened
+   * because somebody asked for it: clicking the margin to write a comment and
+   * then having to click the box as well is one click too many.
+   */
+  autoFocus?: boolean;
   onChange: (value: string) => void;
   onSubmit: () => void;
   onCancel?: () => void;
@@ -58,11 +64,26 @@ export function MarkdownCommentEditor({
   submitLabel,
   placeholder,
   secondaryAction,
+  autoFocus = false,
   onChange,
   onSubmit,
   onCancel,
 }: MarkdownCommentEditorProps): React.ReactElement {
   const inputRef = React.useRef<HTMLTextAreaElement & HTMLInputElement>(null);
+  // Focused on the next frame rather than on mount, and not through the input's
+  // own `autoFocus`: this editor is mounted inside a Monaco view zone by a
+  // portal, in the same gesture that Monaco is handling as a click on itself.
+  // Monaco puts the focus back on the code when it finishes with that click, so
+  // asking for it any earlier loses it again.
+  React.useEffect(() => {
+    if (!autoFocus) {
+      return;
+    }
+
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [autoFocus]);
+
   // Bumped when the toolbar inserts an "@": the caret is only moved on the next
   // frame, so the typeahead needs telling to look again once it has landed.
   const [caretRevision, setCaretRevision] = React.useState(0);
