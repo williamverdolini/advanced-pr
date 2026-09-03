@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "advanced-pr-dev",
   "publisher": "NebulaImprover",
-  "version": "0.9.16",
+  "version": "0.9.17",
   "name": "Advanced PR Review (Development)",
   "description": "Packaged rehearsal of Advanced PR Review, served from the Marketplace CDN.",
   "public": false,

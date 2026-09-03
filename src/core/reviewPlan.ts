@@ -61,6 +61,24 @@ export interface PlanWarning {
   path?: string;
 }
 
+/**
+ * Whether a warning is worth putting in front of the reader.
+ *
+ * A stale entry is not: it says the plan names a file the pull request no longer
+ * has, which is what a later push removing that file looks like. Nothing is
+ * broken and there is nothing to do — the file is left out of its step, the plan
+ * reads the same to everyone, and opening the editor already shows it gone. The
+ * others are the author's mistakes, and each of them changes what gets reviewed:
+ * a path claimed by two steps, two steps with one title, two paths that differ
+ * only in case.
+ *
+ * The warning itself is still produced. It says why a listed file is in no step,
+ * which is worth having when the plan is being written rather than read.
+ */
+export function isActionablePlanWarning(warning: PlanWarning): boolean {
+  return warning.kind !== "stale-entry";
+}
+
 export interface StepPlan {
   planId: string;
   version: number;

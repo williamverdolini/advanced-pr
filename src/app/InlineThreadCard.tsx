@@ -194,6 +194,7 @@ export function InlineThreadCard({
                   disabled={pending}
                   submitLabel="Save"
                   placeholder="Edit your comment"
+                  autoFocus
                   onChange={setEditText}
                   onCancel={() => setEditingCommentId(undefined)}
                   onSubmit={() =>
@@ -241,6 +242,7 @@ export function InlineThreadCard({
           disabled={pending}
           submitLabel="Reply"
           placeholder="Write a reply"
+          autoFocus
           // Resolving is offered beside the reply, not instead of it: the last
           // word on a discussion and closing it are usually the same intent,
           // and doing it in two round-trips means two refreshes.

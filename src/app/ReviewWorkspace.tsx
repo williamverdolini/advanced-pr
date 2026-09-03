@@ -30,7 +30,7 @@ import {
 } from "../core/diffViewMode";
 import { adjacentFile, fileNameFromPath, nextFileToReview } from "../core/fileTree";
 import type { InlineZoneDescriptor } from "../core/inlineZones";
-import type { ReviewStep } from "../core/reviewPlan";
+import { isActionablePlanWarning, type ReviewStep } from "../core/reviewPlan";
 import { maxSplitterWidth, minSplitterWidth } from "../core/splitterWidth";
 import { toPlainText } from "../core/markdown";
 import { collapsedThreadIds } from "../core/threadCollapse";
@@ -133,6 +133,8 @@ export function ReviewWorkspace({
     onAdvanceToStep: (step) => selectStep(step),
     onPlanCreated: () => setPlanEditorOpen(false),
   });
+
+  const actionableWarnings = workspace.plan.warnings.filter(isActionablePlanWarning);
 
   const selectedStep = workspace.plan.steps.find((step) => step.stepId === selectedStepId);
   const selectedStepStatus = selectedStep
@@ -742,9 +744,9 @@ export function ReviewWorkspace({
               onConfirm={review.approvePullRequest}
             />
           )}
-          {workspace.plan.warnings.length > 0 && (
+          {actionableWarnings.length > 0 && (
             <MessageCard severity={MessageCardSeverity.Warning}>
-              {workspace.plan.warnings.map((warning) => warning.message).join(" ")}
+              {actionableWarnings.map((warning) => warning.message).join(" ")}
             </MessageCard>
           )}
         </section>

@@ -42,6 +42,7 @@ export function InlineComposer({
         disabled={pending}
         submitLabel="Comment"
         placeholder="Write a comment on this code"
+        autoFocus
         onChange={setValue}
         onCancel={onCancel}
         onSubmit={() => void submit()}

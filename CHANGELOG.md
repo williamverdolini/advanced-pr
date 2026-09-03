@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.8
+
+- **A file removed from the pull request no longer raises a warning.** The plan naming a path the pull request no longer has is what a later push deleting that file looks like: the file is simply left out of its step, the plan reads the same to everyone, and there is nothing for a reviewer to do about it. The warnings that remain are the author's own — a path claimed by two steps, two steps with one title, two paths differing only in case.
+- **Writing a comment starts in the box.** Clicking the margin to add a comment, replying to a thread, or editing your own comment now puts the caret in it, instead of asking for a second click.
+
 ## 0.9.7
 
 - **Approving a step no longer mails everyone.** A decision on one step was a reply in the ledger thread, so every reviewer who had ever written there got a message for every step anybody ticked. Those are now written as system comments, which Azure DevOps does not notify on. Clearing feedback and signing off still do: the first mentions each reviewer whose approval it discards, and the mention is how they find out.
