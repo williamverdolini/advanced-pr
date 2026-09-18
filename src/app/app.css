@@ -1170,13 +1170,27 @@ body,
   margin-bottom: 0;
 }
 
+/* One blank line between blocks, as the comment thread on the Files tab shows
+   them: at 4px two paragraphs read as one wrapped sentence, which is exactly
+   what the blank line in the source was written to prevent. Sibling margins
+   collapse, so the gap is 8px and not 16. */
 .markdown-body p,
 .markdown-body ul,
 .markdown-body ol,
 .markdown-body pre,
 .markdown-body blockquote,
 .markdown-body .markdown-table {
-  margin: 4px 0;
+  margin: 8px 0;
+}
+
+/* A quote carries blocks of its own; the outer padding already spaces them off
+   the bar, so the first and last must not add to it. */
+.markdown-body blockquote > :first-child {
+  margin-top: 0;
+}
+
+.markdown-body blockquote > :last-child {
+  margin-bottom: 0;
 }
 
 /* The scroll belongs to the table, not to the page: a table too wide for the
@@ -1202,6 +1216,11 @@ body,
      long cell does not centre itself against its short neighbours. */
   text-align: left;
   vertical-align: top;
+  /* Not the `anywhere` the prose around it uses: that makes a cell's smallest
+     width one character, so a table of several columns is squeezed into
+     one-letter stacks instead of keeping its words and letting the wrapper
+     scroll. `break-word` only splits a word that cannot fit on its own. */
+  overflow-wrap: break-word;
 }
 
 .markdown-body th {

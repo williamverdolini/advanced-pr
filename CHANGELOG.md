@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.0
+
+- **A URL written on its own is a link**, as it is on the Files tab. Pasting a work item address mid-sentence used to leave it as text; it now becomes a link, and so do a bare `www.` host and an email address. The full stop or bracket that ends the sentence stays out of the link, and a URL already inside `[text](url)`, an image or a code span is left exactly as it was.
+- **A blank line between two paragraphs is visible again.** Blocks were spaced 4px apart, close enough that two paragraphs read as one wrapped sentence; they now carry the blank line the comment was written with.
+- **A table written inside a quote renders as a table.** Quoted text was read one line at a time, so anything with a shape — a table above all, but also a list, a fenced block or a second level of quoting — came out as its raw characters. A quote now holds blocks like the rest of the comment.
+- **A table of several columns keeps its words.** Cells broke words at any character, which let the browser squeeze every column down to one letter instead of letting the table scroll.
+
 ## 0.9.8
 
 - **A file removed from the pull request no longer raises a warning.** The plan naming a path the pull request no longer has is what a later push deleting that file looks like: the file is simply left out of its step, the plan reads the same to everyone, and there is nothing for a reviewer to do about it. The warnings that remain are the author's own — a path claimed by two steps, two steps with one title, two paths differing only in case.

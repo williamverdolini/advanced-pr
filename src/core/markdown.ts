@@ -10,7 +10,9 @@ export type MarkdownInline =
 export type MarkdownBlock =
   | { kind: "paragraph"; lines: MarkdownInline[][] }
   | { kind: "heading"; level: number; content: MarkdownInline[] }
-  | { kind: "quote"; lines: MarkdownInline[][] }
+  // A quote holds blocks, not lines: a table, a list or a fence written inside
+  // one is quoted content like any other, and Azure DevOps renders it as such.
+  | { kind: "quote"; children: MarkdownBlock[] }
   | { kind: "list"; ordered: boolean; items: MarkdownInline[][] }
   | { kind: "codeBlock"; language?: string; value: string }
   | {
@@ -70,13 +72,15 @@ export function parseMarkdown(text: string): MarkdownBlock[] {
       continue;
     }
 
-    if (/^>\s?/.test(line)) {
-      const quoted: MarkdownInline[][] = [];
-      while (index < lines.length && /^>\s?/.test(lines[index])) {
-        quoted.push(parseInline(lines[index].replace(/^>\s?/, "")));
+    if (/^>/.test(line)) {
+      const quoted: string[] = [];
+      while (index < lines.length && /^>/.test(lines[index])) {
+        quoted.push(lines[index].replace(/^>\s?/, ""));
         index += 1;
       }
-      blocks.push({ kind: "quote", lines: quoted });
+      // Parsed again with the markers off, so one more `>` nests and everything
+      // else — tables above all — reads inside a quote as it does outside one.
+      blocks.push({ kind: "quote", children: parseMarkdown(quoted.join("\n")) });
       continue;
     }
 
@@ -106,7 +110,7 @@ export function parseMarkdown(text: string): MarkdownBlock[] {
       index < lines.length &&
       lines[index].trim() &&
       !/^```/.test(lines[index]) &&
-      !/^>\s?/.test(lines[index]) &&
+      !/^>/.test(lines[index]) &&
       !/^#{1,6}\s/.test(lines[index]) &&
       !bullet.test(lines[index]) &&
       !numbered.test(lines[index]) &&
@@ -137,8 +141,67 @@ const inlinePattern = new RegExp(
     "_(?<emphasisUnderscore>[\\s\\S]+?)_",
     "!\\[(?<imageAlt>[^\\]]*)\\]\\((?<imageHref>[^)\\s]+)\\)",
     "\\[(?<linkText>[^\\]]*)\\]\\((?<linkHref>[^)\\s]+)\\)",
+    // A URL written on its own, which Azure DevOps turns into a link and this
+    // renderer used to leave as text. Brackets are excluded so a bare URL can
+    // never eat the syntax of a link written around it; the trailing
+    // punctuation the class does admit is given back by `trimAutolinkTail`.
+    [
+      "(?<autolink>",
+      "https?:\\/\\/[^\\s<>\\[\\]]+",
+      "|www\\.[\\w-]+\\.[^\\s<>\\[\\]]+",
+      `|[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+`,
+      ")",
+    ].join(""),
   ].join("|"),
 );
+
+/** The closing bracket that belongs to a URL only if the URL opened it. */
+const autolinkBrackets: Readonly<Record<string, string>> = { ")": "(", "]": "[", "}": "{" };
+
+/**
+ * The end of a sentence is not part of the URL in it: a link followed by a full
+ * stop, or wrapped in brackets, must not swallow either. A closing bracket is
+ * kept when the URL opened it — Wikipedia and Azure DevOps both write those.
+ */
+export function trimAutolinkTail(value: string): string {
+  let url = value;
+
+  for (;;) {
+    const last = url.slice(-1);
+
+    if (/[.,;:!?'"]/.test(last)) {
+      url = url.slice(0, -1);
+      continue;
+    }
+
+    const opener = autolinkBrackets[last];
+    const occurrences = (character: string): number =>
+      [...url].filter((each) => each === character).length;
+    if (opener && occurrences(last) > occurrences(opener)) {
+      url = url.slice(0, -1);
+      continue;
+    }
+
+    return url;
+  }
+}
+
+/**
+ * The href for a URL written without one. A bare host gets `https`, and an
+ * address gets `mailto:`, which is what the comment author meant by writing it.
+ */
+function autolinkHref(url: string): string | undefined {
+  // A host is required: trimming the tail off `https://.` leaves a scheme and
+  // nothing to go to.
+  if (/^https?:\/\/[^\s/]/i.test(url)) {
+    return url;
+  }
+  if (/^www\./i.test(url)) {
+    return `https://${url}`;
+  }
+
+  return url.includes("@") ? `mailto:${url}` : undefined;
+}
 
 /**
  * Flattens comment Markdown to a single line, for places that show a summary
@@ -247,25 +310,29 @@ export function toPlainText(
       })
       .join("");
 
+  const flattenBlock = (block: MarkdownBlock): string => {
+    switch (block.kind) {
+      case "codeBlock":
+        return block.value;
+      case "heading":
+        return flattenInline(block.content);
+      case "list":
+        return block.items.map(flattenInline).join(" ");
+      // Cell by cell, in reading order: a summary of a table is its contents,
+      // and its shape does not survive one line of text anyway.
+      case "table":
+        return [block.header, ...block.rows]
+          .map((row) => row.map(flattenInline).join(" "))
+          .join(" ");
+      case "quote":
+        return block.children.map(flattenBlock).join(" ");
+      default:
+        return block.lines.map(flattenInline).join(" ");
+    }
+  };
+
   return parseMarkdown(content)
-    .map((block) => {
-      switch (block.kind) {
-        case "codeBlock":
-          return block.value;
-        case "heading":
-          return flattenInline(block.content);
-        case "list":
-          return block.items.map(flattenInline).join(" ");
-        // Cell by cell, in reading order: a summary of a table is its contents,
-        // and its shape does not survive one line of text anyway.
-        case "table":
-          return [block.header, ...block.rows]
-            .map((row) => row.map(flattenInline).join(" "))
-            .join(" ");
-        default:
-          return block.lines.map(flattenInline).join(" ");
-      }
-    })
+    .map(flattenBlock)
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
@@ -276,6 +343,20 @@ export function findMentionIds(text: string): string[] {
   return [...text.matchAll(new RegExp(`@<(${guidPattern})>`, "g"))].map((match) =>
     match[1].toLowerCase(),
   );
+}
+
+/** Every link replaced by what it was labelled with, at any depth. */
+function withoutLinks(nodes: readonly MarkdownInline[]): MarkdownInline[] {
+  return nodes.flatMap((node) => {
+    if (node.kind === "link") {
+      return withoutLinks(node.children);
+    }
+    if (node.kind === "strong" || node.kind === "emphasis") {
+      return [{ ...node, children: withoutLinks(node.children) }];
+    }
+
+    return [node];
+  });
 }
 
 export function parseInline(text: string): MarkdownInline[] {
@@ -294,6 +375,7 @@ export function parseInline(text: string): MarkdownInline[] {
     }
 
     const groups = match.groups ?? {};
+    let consumed = match[0].length;
 
     if (groups.code !== undefined) {
       nodes.push({ kind: "code", value: groups.code.trim() });
@@ -316,11 +398,24 @@ export function parseInline(text: string): MarkdownInline[] {
       nodes.push({ kind: "image", alt: groups.imageAlt ?? "", href: groups.imageHref });
     } else if (groups.linkHref !== undefined) {
       const href = safeLinkHref(groups.linkHref);
-      const children = parseInline(groups.linkText || groups.linkHref);
+      // The label of a link is often the URL itself, and autolinking would turn
+      // it into a link inside a link, which is not valid markup.
+      const children = withoutLinks(parseInline(groups.linkText || groups.linkHref));
       nodes.push(href ? { kind: "link", href, children } : { kind: "text", value: match[0] });
+    } else if (groups.autolink !== undefined) {
+      // Only what the trim left is consumed, so the full stop or the bracket it
+      // gave back stays in the text instead of disappearing with the link.
+      const url = trimAutolinkTail(groups.autolink);
+      const href = autolinkHref(url);
+      consumed = url.length || match[0].length;
+      nodes.push(
+        href
+          ? { kind: "link", href, children: [{ kind: "text", value: url }] }
+          : { kind: "text", value: url || match[0] },
+      );
     }
 
-    rest = rest.slice(match.index + match[0].length);
+    rest = rest.slice(match.index + consumed);
   }
 
   return nodes;
