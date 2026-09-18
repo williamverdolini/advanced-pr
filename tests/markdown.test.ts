@@ -6,6 +6,7 @@ import {
   safeImageHref,
   safeLinkHref,
   toPlainText,
+  trimAutolinkTail,
 } from "../src/core/markdown";
 
 describe("comment markdown", () => {
@@ -45,6 +46,66 @@ describe("comment markdown", () => {
     ).toBe("[x](javascript:alert(1))");
     expect(safeLinkHref("JavaScript:alert(1)")).toBeUndefined();
     expect(safeLinkHref("mailto:a@b.c")).toBe("mailto:a@b.c");
+  });
+
+  // Real payload: a work item URL pasted mid-sentence, which the Files tab
+  // shows as a link and this renderer used to leave as text.
+  describe("bare URLs", () => {
+    const href = "https://dev.azure.com/prxm/Jarvis/_workitems/edit/19602";
+
+    it("links a URL written without brackets", () => {
+      expect(parseInline(`parte 2 ${href} perché`)).toEqual([
+        { kind: "text", value: "parte 2 " },
+        { kind: "link", href, children: [{ kind: "text", value: href }] },
+        { kind: "text", value: " perché" },
+      ]);
+    });
+
+    it("leaves the punctuation that ends the sentence out of the link", () => {
+      expect(parseInline(`vedi ${href}.`)).toEqual([
+        { kind: "text", value: "vedi " },
+        { kind: "link", href, children: [{ kind: "text", value: href }] },
+        { kind: "text", value: "." },
+      ]);
+      expect(trimAutolinkTail(`(${href})`.slice(1))).toBe(href);
+      // A bracket the URL opened itself stays in it.
+      expect(trimAutolinkTail("https://example.org/a_(b)")).toBe("https://example.org/a_(b)");
+    });
+
+    it("links a bare host and an address", () => {
+      expect(parseInline("www.example.org")).toEqual([
+        {
+          kind: "link",
+          href: "https://www.example.org",
+          children: [{ kind: "text", value: "www.example.org" }],
+        },
+      ]);
+      expect(parseInline("scrivi a b@example.org")).toEqual([
+        { kind: "text", value: "scrivi a " },
+        {
+          kind: "link",
+          href: "mailto:b@example.org",
+          children: [{ kind: "text", value: "b@example.org" }],
+        },
+      ]);
+    });
+
+    it("leaves a URL that is already a link, an image or code alone", () => {
+      expect(parseInline(`[docs](${href})`)).toEqual([
+        { kind: "link", href, children: [{ kind: "text", value: "docs" }] },
+      ]);
+      expect(parseInline(`![shot](${href})`)).toEqual([{ kind: "image", alt: "shot", href }]);
+      expect(parseInline(`\`${href}\``)).toEqual([{ kind: "code", value: href }]);
+    });
+
+    it("does not nest a link inside a link when the label is a URL", () => {
+      expect(parseInline(`[${href}](${href})`)).toEqual([
+        { kind: "link", href, children: [{ kind: "text", value: href }] },
+      ]);
+      expect(parseInline(`[](${href})`)).toEqual([
+        { kind: "link", href, children: [{ kind: "text", value: href }] },
+      ]);
+    });
   });
 
   // A pasted screenshot: the comment carries a link to a pull request
@@ -125,6 +186,35 @@ describe("comment markdown", () => {
       "codeBlock",
     ]);
     expect(blocks[3]).toEqual({ kind: "codeBlock", language: "ts", value: "const x = 1" });
+  });
+
+  describe("quotes", () => {
+    it("parses the quoted text as blocks", () => {
+      const [block] = parseMarkdown("> quoted\n>\n> - one");
+      if (block.kind !== "quote") {
+        throw new Error("expected a quote");
+      }
+      expect(block.children.map((child) => child.kind)).toEqual(["paragraph", "list"]);
+    });
+
+    it("reads a table written inside a quote", () => {
+      const [block] = parseMarkdown("> | a | b |\n> |---|---|\n> | 1 | 2 |");
+      if (block.kind !== "quote") {
+        throw new Error("expected a quote");
+      }
+      expect(block.children.map((child) => child.kind)).toEqual(["table"]);
+    });
+
+    it("nests a quote inside a quote", () => {
+      const [block] = parseMarkdown(">> deep");
+      if (block.kind !== "quote" || block.children[0].kind !== "quote") {
+        throw new Error("expected a nested quote");
+      }
+    });
+
+    it("summarises a quote as the text in it", () => {
+      expect(toPlainText("> | a |\n> |---|\n> | 1 |")).toBe("a 1");
+    });
   });
 
   it("keeps consecutive lines inside one paragraph", () => {

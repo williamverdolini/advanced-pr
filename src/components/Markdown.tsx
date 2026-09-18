@@ -55,7 +55,9 @@ function Block({ block }: { block: MarkdownBlock }): React.ReactElement {
     case "quote":
       return (
         <blockquote>
-          <Lines lines={block.lines} />
+          {block.children.map((child, index) => (
+            <Block key={index} block={child} />
+          ))}
         </blockquote>
       );
     case "list":
