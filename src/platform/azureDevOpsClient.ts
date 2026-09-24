@@ -23,6 +23,7 @@ import {
 } from "../core/ledger";
 import {
   buildStepPlan,
+  hostRepositoryPath,
   normalizeRepositoryPath,
   parsePlanMarker,
   type StepPlan,
@@ -387,7 +388,7 @@ export async function createAnchoredThread(
   const start = { line: position.startLine, offset: position.startOffset };
   const end = { line: position.endLine, offset: position.endOffset };
   const threadContext = {
-    filePath: file.path,
+    filePath: hostRepositoryPath(file.path),
     leftFileStart: position.side === "left" ? start : undefined,
     leftFileEnd: position.side === "left" ? end : undefined,
     rightFileStart: position.side === "right" ? start : undefined,

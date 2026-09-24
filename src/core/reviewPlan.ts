@@ -492,6 +492,13 @@ export function normalizeRepositoryPath(value: string): string {
     .trim();
 }
 
+// Paths are held relative inside the extension, but Azure DevOps matches a
+// thread's `filePath` against its own `/`-rooted form verbatim: a thread anchored
+// on `src/a.ts` is accepted, then missing from the Files tab and its comment list.
+export function hostRepositoryPath(value: string): string {
+  return `/${normalizeRepositoryPath(value)}`;
+}
+
 function compareText(left: string, right: string): number {
   return left.localeCompare(right, "en", { sensitivity: "variant" });
 }
