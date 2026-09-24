@@ -1,6 +1,7 @@
 import * as React from "react";
 import {
   findStepForFile,
+  hostRepositoryPath,
   normalizeRepositoryPath,
   type ReviewStep,
 } from "../core/reviewPlan";
@@ -95,7 +96,7 @@ export function useHostLocationSync({
 
   React.useEffect(() => {
     if (selectedFile) {
-      void setHostQueryParams({ path: `/${selectedFile.path}` });
+      void setHostQueryParams({ path: hostRepositoryPath(selectedFile.path)});
     }
   }, [selectedFile]);
 }

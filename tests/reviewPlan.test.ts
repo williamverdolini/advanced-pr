@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildStepPlan,
   findStepForFile,
+  hostRepositoryPath,
   isActionablePlanWarning,
   parsePlanMarker,
 } from "../src/core/reviewPlan";
@@ -390,5 +391,16 @@ describe("which plan warnings are worth showing", () => {
     expect(plan.steps[0].files).toEqual(["src/core.ts"]);
     expect(plan.warnings.map((warning) => warning.kind)).toEqual(["stale-entry"]);
     expect(plan.warnings.filter(isActionablePlanWarning)).toEqual([]);
+  });
+});
+
+describe("host repository path", () => {
+  it("roots a relative path the way Azure DevOps stores it", () => {
+    expect(hostRepositoryPath("src/Intranet/LongRunningJob.cs")).toBe("/src/Intranet/LongRunningJob.cs");
+  });
+
+  it("does not double a slash already there", () => {
+    expect(hostRepositoryPath("/src/a.ts")).toBe("/src/a.ts");
+    expect(hostRepositoryPath("\\src\\a.ts")).toBe("/src/a.ts");
   });
 });

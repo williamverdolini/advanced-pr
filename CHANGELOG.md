@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.1
+
+- **A comment written on a line shows on the Files tab.** The thread was anchored on the path without its leading `/` (`src/a.ts` rather than `/src/a.ts`), which Azure DevOps accepts but never matches against the file: the comment was missing from the file in the native view and from its comment list. New comments are anchored on the rooted path. Comments already written with the old path stay where they are, because a thread's anchor cannot be changed after it is created.
+
 ## 0.10.0
 
 - **A URL written on its own is a link**, as it is on the Files tab. Pasting a work item address mid-sentence used to leave it as text; it now becomes a link, and so do a bare `www.` host and an email address. The full stop or bracket that ends the sentence stays out of the link, and a URL already inside `[text](url)`, an image or a code span is left exactly as it was.
