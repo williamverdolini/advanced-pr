@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.2
+
+- **A deleted comment no longer breaks the tab.** Azure DevOps keeps a deleted comment in its thread with its content removed, and the review ledger read every comment of every general thread without skipping it: deleting the first comment of an old plan, while its replies were still there, stopped the Guided Review tab from loading with `Cannot read properties of undefined (reading 'match')`. Deleted comments are now skipped, as the rest of the workspace already did.
+
 ## 0.10.1
 
 - **A comment written on a line shows on the Files tab.** The thread was anchored on the path without its leading `/` (`src/a.ts` rather than `/src/a.ts`), which Azure DevOps accepts but never matches against the file: the comment was missing from the file in the native view and from its comment list. New comments are anchored on the rooted path. Comments already written with the old path stay where they are, because a thread's anchor cannot be changed after it is created.

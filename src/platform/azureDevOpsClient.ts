@@ -266,7 +266,11 @@ function projectThreads(
     .filter((thread) => !thread.threadContext?.filePath)
     .map((thread) => ({
       thread,
+      // A deleted comment stays in its thread with no content, so it must be
+      // skipped before parsing: one deleted plan comment would otherwise break
+      // the whole tab, not only its own thread.
       events: thread.comments
+        .filter((comment) => !comment.isDeleted && comment.content !== undefined)
         .map((comment) =>
           parseLedgerEvent(
             comment.content,
@@ -358,7 +362,7 @@ export async function appendLedgerEvent(
     const threads = await client.getThreads(repositoryId, pullRequestId, projectId);
     const eventWasWritten = threads
       .flatMap((thread) => thread.comments)
-      .some((existingComment) => existingComment.content.includes(event.eventId));
+      .some((existingComment) => existingComment.content?.includes(event.eventId));
     if (!eventWasWritten) {
       throw error;
     }
