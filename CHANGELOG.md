@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Mermaid diagrams are drawn.** A fenced `mermaid` block in a Markdown file's preview, or in a comment, now shows the diagram, in the host's light or dark theme, instead of its source. A block that does not parse shows its source with the error. The library loads only the first time a diagram appears.
+- **A comment you are writing is not lost when you look elsewhere.** A new comment, a reply or an edit in progress used to vanish on switching file or step. It now stays: coming back to the file reopens the editor with what you typed, and the drafts are kept for you in the extension's storage, so a reload brings them back too. Posting or cancelling discards the draft.
+
 ## 0.10.2
 
 - **A deleted comment no longer breaks the tab.** Azure DevOps keeps a deleted comment in its thread with its content removed, and the review ledger read every comment of every general thread without skipping it: deleting the first comment of an old plan, while its replies were still there, stopped the Guided Review tab from loading with `Cannot read properties of undefined (reading 'match')`. Deleted comments are now skipped, as the rest of the workspace already did.

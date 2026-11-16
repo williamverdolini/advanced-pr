@@ -33,6 +33,7 @@ import type { InlineZoneDescriptor } from "../core/inlineZones";
 import { isActionablePlanWarning, type ReviewStep } from "../core/reviewPlan";
 import { maxSplitterWidth, minSplitterWidth } from "../core/splitterWidth";
 import { toPlainText } from "../core/markdown";
+import { newThreadDraftKey } from "../core/commentDrafts";
 import { collapsedThreadIds } from "../core/threadCollapse";
 import { indexThreadsByFile } from "../core/threadIndex";
 import {
@@ -61,6 +62,7 @@ import { StepWizard } from "./StepWizard";
 import { useAsyncResource } from "./useAsyncResource";
 import { useCollapsedThreads } from "./useCollapsedThreads";
 import { useCommentAttachments } from "./useCommentAttachments";
+import { useCommentDrafts } from "./useCommentDrafts";
 import { useDiffSelection } from "./useDiffSelection";
 import { useHostFullScreen } from "./useHostFullScreen";
 import { useHostLocationSync } from "./useHostLocationSync";
@@ -105,7 +107,6 @@ export function ReviewWorkspace({
     saveDiffViewSettings(next);
     setViewSettings(next);
   };
-  const [draft, setDraft] = React.useState<DiffSelection>();
   const [explainExpanded, setExplainExpanded] = React.useState(false);
   const [clearFeedbackScope, setClearFeedbackScope] = React.useState<FeedbackScope>();
   const [planEditorOpen, setPlanEditorOpen] = React.useState(false);
@@ -172,6 +173,13 @@ export function ReviewWorkspace({
     [workspace.id, workspace.projectId, workspace.repositoryId],
   );
   const attachments = useCommentAttachments(attachmentSource);
+  const commentDrafts = useCommentDrafts(attachmentSource);
+  // The composer of a new thread is per file and lives in the drafts, not in
+  // local state: leaving the file and coming back reopens it where it was, with
+  // what was typed in it.
+  const draftKey = selectedFile ? newThreadDraftKey(selectedFile.path) : undefined;
+  const newThreadDraft = draftKey ? commentDrafts.drafts[draftKey] : undefined;
+  const draft: DiffSelection | undefined = newThreadDraft?.anchor;
   const viewedScope = React.useMemo(
     () => ({
       id: workspace.id,
@@ -268,7 +276,6 @@ export function ReviewWorkspace({
   const selectStep = (step: ReviewStep): void => {
     setSelectedStepId(step.stepId);
     setSelectedThreadId(undefined);
-    setDraft(undefined);
     collapsed.reset();
     setSelectedFile(
       nextFileToReview(
@@ -300,7 +307,6 @@ export function ReviewWorkspace({
     (file: ChangedFile): void => {
       setSelectedFile(file);
       setSelectedThreadId(undefined);
-      setDraft(undefined);
       setFilesOpen(false);
       selection.clear();
       // A new file starts from the defaults: resolved threads folded, whatever
@@ -331,21 +337,28 @@ export function ReviewWorkspace({
     [collapsed, collapsedIds],
   );
 
+  const { setDraft: setCommentDraft } = commentDrafts;
+  const newThreadText = newThreadDraft?.text ?? "";
+  // Asking for a comment on another line moves the composer there with what was
+  // already typed in it, as it did when the composer kept its own state.
   const requestComment = React.useCallback(
     (line: DiffSelection): void => {
-      setDraft(selection.anchorFor(line));
+      if (draftKey) {
+        const anchor = selection.anchorFor(line);
+        setCommentDraft(draftKey, (current) => ({ text: current?.text ?? "", anchor }));
+      }
       setSelectedThreadId(undefined);
     },
-    [selection],
+    [draftKey, selection, setCommentDraft],
   );
 
   const submitDraft = async (content: string): Promise<void> => {
-    if (!selectedFile || !draft) {
+    if (!selectedFile || !draft || !draftKey) {
       return;
     }
 
     await createAnchoredThread(workspace, selectedFile, draft, content);
-    setDraft(undefined);
+    setCommentDraft(draftKey, undefined);
     await onRefresh();
   };
 
@@ -354,7 +367,13 @@ export function ReviewWorkspace({
       return (
         <InlineComposer
           anchor={draft}
-          onCancel={() => setDraft(undefined)}
+          value={newThreadText}
+          onChange={(text) => {
+            if (draftKey && draft) {
+              setCommentDraft(draftKey, { text, anchor: draft });
+            }
+          }}
+          onCancel={() => draftKey && setCommentDraft(draftKey, undefined)}
           onSubmit={submitDraft}
         />
       );
@@ -417,6 +436,8 @@ export function ReviewWorkspace({
             // Nothing to fold or unfold by hand: dropping the decision lets the
             // thread's new state speak, which folds it when it was resolved.
             onResolvedChange={() => collapsed.clearOverride(thread.id)}
+            drafts={commentDrafts.drafts}
+            onDraftChange={setCommentDraft}
             onRefresh={onRefresh}
           />
           ),

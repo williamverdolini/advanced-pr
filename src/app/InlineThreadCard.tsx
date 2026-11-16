@@ -2,6 +2,11 @@ import * as React from "react";
 import { Button } from "azure-devops-ui/Button";
 import { Markdown } from "../components/Markdown";
 import { MarkdownCommentEditor } from "../components/MarkdownCommentEditor";
+import {
+  editDraftKey,
+  replyDraftKey,
+  type CommentDrafts,
+} from "../core/commentDrafts";
 import { buildThreadShareLink } from "../core/shareLink";
 import {
   replyToThread,
@@ -15,6 +20,7 @@ import { copyText } from "../platform/clipboard";
 import { getTabContributionId } from "../platform/extensionContext";
 import { getPullRequestPageUrl } from "../platform/pullRequestUrl";
 import { formatDate } from "./formatDate";
+import type { CommentDraftUpdate } from "./useCommentDrafts";
 import { usePendingAction } from "./usePendingAction";
 
 export interface InlineThreadCardProps {
@@ -34,6 +40,13 @@ export interface InlineThreadCardProps {
    * they are done with it.
    */
   onResolvedChange: () => void;
+  /**
+   * Replies and edits being written, held by the workspace: the card is
+   * unmounted whenever its file leaves the screen, and what was typed in it
+   * must not go with it.
+   */
+  drafts: CommentDrafts;
+  onDraftChange: (key: string, update: CommentDraftUpdate) => void;
   onRefresh: () => Promise<unknown>;
 }
 
@@ -52,12 +65,37 @@ export function InlineThreadCard({
   onHighlightShown,
   onCollapse,
   onResolvedChange,
+  drafts,
+  onDraftChange,
   onRefresh,
 }: InlineThreadCardProps): React.ReactElement {
-  const [replyOpen, setReplyOpen] = React.useState(false);
-  const [replyText, setReplyText] = React.useState("");
-  const [editingCommentId, setEditingCommentId] = React.useState<number>();
-  const [editText, setEditText] = React.useState("");
+  const replyKey = replyDraftKey(thread.id);
+  const replyText = drafts[replyKey]?.text ?? "";
+  const setReplyText = (text: string): void =>
+    onDraftChange(replyKey, text ? { text } : undefined);
+  // A card that comes back with a reply or an edit in progress reopens it: the
+  // editor being shut is how the text would otherwise be lost from sight.
+  const [replyOpen, setReplyOpen] = React.useState(() => replyText !== "");
+  const [editingCommentId, setEditingCommentId] = React.useState(
+    () => thread.comments.find((comment) => drafts[editDraftKey(thread.id, comment.id)])?.id,
+  );
+  const editKey =
+    editingCommentId === undefined ? undefined : editDraftKey(thread.id, editingCommentId);
+  const editedComment = thread.comments.find((comment) => comment.id === editingCommentId);
+  const editText = (editKey && drafts[editKey]?.text) ?? editedComment?.content ?? "";
+  // An edit that matches the stored comment is not a draft: keeping it would
+  // reopen an editor with nothing to save.
+  const setEditText = (text: string): void => {
+    if (editKey) {
+      onDraftChange(editKey, text === editedComment?.content ? undefined : { text });
+    }
+  };
+  const stopEditing = (): void => {
+    if (editKey) {
+      onDraftChange(editKey, undefined);
+    }
+    setEditingCommentId(undefined);
+  };
   const { pending, error, run } = usePendingAction("Unable to update this comment.");
   const share = useShareLink(workspace, thread);
 
@@ -135,10 +173,7 @@ export function InlineThreadCard({
                       ariaLabel="Edit this comment"
                       tooltipProps={{ text: "Edit" }}
                       disabled={pending}
-                      onClick={() => {
-                        setEditingCommentId(comment.id);
-                        setEditText(comment.content);
-                      }}
+                      onClick={() => setEditingCommentId(comment.id)}
                     />
                   )}
                   {/* Azure DevOps records a like on a comment, so every reply
@@ -196,7 +231,7 @@ export function InlineThreadCard({
                   placeholder="Edit your comment"
                   autoFocus
                   onChange={setEditText}
-                  onCancel={() => setEditingCommentId(undefined)}
+                  onCancel={stopEditing}
                   onSubmit={() =>
                     void runAndRefresh(async () => {
                       await updateCommentContent(
@@ -205,7 +240,7 @@ export function InlineThreadCard({
                         comment.id,
                         editText.trim(),
                       );
-                      setEditingCommentId(undefined);
+                      stopEditing();
                     })
                   }
                 />

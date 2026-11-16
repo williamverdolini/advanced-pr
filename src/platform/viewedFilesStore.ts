@@ -1,8 +1,3 @@
-import * as SDK from "azure-devops-extension-sdk";
-import {
-  type IExtensionDataManager,
-  type IExtensionDataService,
-} from "azure-devops-extension-api/Common";
 import { stableHash } from "../core/hash";
 import {
   createViewedFileRevisions,
@@ -10,9 +5,7 @@ import {
   type ViewedFileRevisions,
 } from "../core/viewedFiles";
 import type { PullRequestWorkspace } from "./azureDevOpsClient";
-
-const userScope = { scopeType: "User", scopeValue: "Me" };
-let managerPromise: Promise<IExtensionDataManager> | undefined;
+import { getExtensionDataManager, userScope } from "./extensionDataManager";
 
 /**
  * The subset of the workspace this store needs. Narrower than the workspace so
@@ -28,7 +21,7 @@ export async function loadViewedFiles(
 ): Promise<ReadonlySet<string>> {
   const key = storageKey(workspace);
   try {
-    const manager = await getManager();
+    const manager = await getExtensionDataManager();
     const revisions = await manager.getValue<ViewedFileRevisions>(key, {
       ...userScope,
       defaultValue: {},
@@ -46,25 +39,11 @@ export async function saveViewedFiles(
   const key = storageKey(workspace);
   const revisions = createViewedFileRevisions(workspace.files, paths);
   try {
-    const manager = await getManager();
+    const manager = await getExtensionDataManager();
     await manager.setValue(key, revisions, userScope);
   } catch {
     window.localStorage.setItem(key, JSON.stringify(revisions));
   }
-}
-
-function getManager(): Promise<IExtensionDataManager> {
-  if (!managerPromise) {
-    managerPromise = (async () => {
-      const [service, accessToken] = await Promise.all([
-        SDK.getService<IExtensionDataService>("ms.vss-features.extension-data-service"),
-        SDK.getAccessToken(),
-      ]);
-      return service.getExtensionDataManager(SDK.getExtensionContext().id, accessToken);
-    })();
-  }
-
-  return managerPromise;
 }
 
 function storageKey(workspace: ViewedFilesScope): string {

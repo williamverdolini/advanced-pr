@@ -5,6 +5,9 @@ import { usePendingAction } from "./usePendingAction";
 
 export interface InlineComposerProps {
   anchor: DiffSelection | undefined;
+  /** Held by the workspace, so the text outlives the composer. */
+  value: string;
+  onChange: (value: string) => void;
   onCancel: () => void;
   onSubmit: (content: string) => Promise<void>;
 }
@@ -12,17 +15,15 @@ export interface InlineComposerProps {
 /** The editor for a new thread, mounted in the diff at the anchored line. */
 export function InlineComposer({
   anchor,
+  value,
+  onChange,
   onCancel,
   onSubmit,
 }: InlineComposerProps): React.ReactElement {
-  const [value, setValue] = React.useState("");
   const { pending, error, run } = usePendingAction("Unable to create the comment.");
 
   const submit = (): Promise<void> =>
-    run(async () => {
-      await onSubmit(value.trim());
-      setValue("");
-    });
+    run(() => onSubmit(value.trim()));
 
   return (
     <article className="inline-thread inline-composer">
@@ -43,7 +44,7 @@ export function InlineComposer({
         submitLabel="Comment"
         placeholder="Write a comment on this code"
         autoFocus
-        onChange={setValue}
+        onChange={onChange}
         onCancel={onCancel}
         onSubmit={() => void submit()}
       />

@@ -15,6 +15,7 @@
     "azure-devops-extension-api": "^5.276.0",
     "azure-devops-extension-sdk": "4.2.0",
     "azure-devops-ui": "^2.277.0",
+    "mermaid": "12.2.0",
     "monaco-editor": "0.53.0",
     "react": "16.14.0",
     "react-dom": "16.14.0"

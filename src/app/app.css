@@ -1290,6 +1290,26 @@ body,
   font-style: italic;
 }
 
+/* A diagram keeps its own size up to the pane's width, the way Azure DevOps
+   shows it; a wide one scrolls inside its block rather than shrinking past
+   legibility. */
+.mermaid-diagram {
+  margin: 8px 0;
+  overflow-x: auto;
+}
+
+.mermaid-diagram img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-diagram.loading,
+.mermaid-diagram-error {
+  color: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  font-style: italic;
+}
+
 /* Rendered in a portal on document.body, because the view zone that holds the
    editor clips its own content. Fixed positioning follows the field's rect. */
 .mention-suggestions {

@@ -8,6 +8,7 @@ import {
 } from "../core/markdown";
 import { AttachmentContext } from "./attachmentContext";
 import { MentionContext } from "./mentionContext";
+import { MermaidDiagram } from "./MermaidDiagram";
 
 export interface MarkdownProps {
   content: string;
@@ -39,6 +40,9 @@ function alignment(value: MarkdownTableAlignment): React.CSSProperties | undefin
 function Block({ block }: { block: MarkdownBlock }): React.ReactElement {
   switch (block.kind) {
     case "codeBlock":
+      if (block.language?.toLowerCase() === "mermaid") {
+        return <MermaidDiagram source={block.value} />;
+      }
       return (
         <pre>
           <code>{block.value}</code>
